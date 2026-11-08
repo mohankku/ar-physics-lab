@@ -144,11 +144,17 @@
     page tracks the ball each camera frame, converts pixels to meters, and fits
     <code>y = y0 + v0·t + ½·g·t²</code>. Untick <strong>Auto start/stop</strong> to press
     Record and Stop yourself. After each fit the fall replays in slow motion over the video,
-    next to a faint ghost ball falling at 9.81 m/s². Tip: a red ball against a white wall works best.</p>
+    next to a faint ghost ball falling at 9.81 m/s²; drag the slider to step through the
+    recorded frames. Tip: a red ball against a white wall works best.</p>
     <div class="stage" id="track-stage">
       <video id="track-video" autoplay muted playsinline></video>
       <canvas class="overlay" id="track-overlay"></canvas>
       <div class="stage-empty"><span><i class="fa-solid fa-video"></i> Camera off.</span><span>Open the camera, then click the ball in the video to sample its color.</span></div>
+    </div>
+    <div class="phys-btn-row scrub-row" id="track-review" hidden>
+      <button class="pub-btn" id="btn-track-play" type="button"><i class="fa-solid fa-play"></i> Replay</button>
+      <input id="track-scrub" type="range" min="0" max="0" value="0" step="1" aria-label="Step through the recorded fall, frame by frame">
+      <span class="phys-status" id="track-scrub-t">slow-motion replay</span>
     </div>
     <div class="phys-controls">
       <div class="phys-field">Ball color
