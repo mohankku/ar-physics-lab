@@ -34,7 +34,9 @@ export function fallPath(a, refG = REFERENCE_G) {
  * @param {{w: number, h: number, dpr: number}} dims
  * @param {ReturnType<typeof fallPath>} path
  * @param {number} tau
- * @param {{ghost?: boolean, ballStyle?: string, measuredG?: number}} [opts]
+ * @param {{ghost?: boolean, ballStyle?: string, measuredG?: number,
+ *   background?: CanvasImageSource|null}} [opts]  background: a recorded
+ *   frame to show under the replay (when scrubbing)
  */
 export function drawReplay(ctx, dims, path, tau, opts = {}) {
   const { w: W, h: H, dpr } = dims;
@@ -43,6 +45,7 @@ export function drawReplay(ctx, dims, path, tau, opts = {}) {
   const r = ballRadius(dims) * 0.8;
   const gap = r * 2.6; // measured ball left of the path, ghost right
   ctx.clearRect(0, 0, W, H);
+  if (opts.background) ctx.drawImage(opts.background, 0, 0, W, H);
 
   // Fitted path, drawn up to the current time.
   ctx.strokeStyle = "rgba(26,86,219,0.9)";

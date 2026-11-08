@@ -24,4 +24,5 @@ export { Camera, FrameClock, DEFAULT_CONSTRAINTS } from "./camera.js";
 export { FreeFall, HandBall, SPIN } from "./sim.js";
 export { FallTrigger } from "./trigger.js";
 export { fallPath, drawReplay, ReplayLoop } from "./replay.js";
+export { FrameRing } from "./framebuffer.js";
 export * as render from "./render.js";
