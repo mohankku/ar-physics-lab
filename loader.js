@@ -1,7 +1,7 @@
 /* AR Physics Lab loader.
  * Usage: <div data-phys-lab></div> <script src=".../loader.js" defer></script>
  * Fetches lab/lab.html into the container, then adds lab/lab.css and the
- * page wiring lab/lab.js (an ES module that imports the AR engine from
+ * page entry lab/main.js (an ES module that imports the AR engine from
  * core/), all resolved relative to this script. Keep this file at the repo
  * root: other sites embed it by URL. */
 (function() {
@@ -11,7 +11,7 @@
 
   var CSS = "lab/lab.css";
   var HTML = "lab/lab.html";
-  var MODULE = "lab/lab.js";
+  var MODULE = "lab/main.js";
 
   function start() {
     var root = document.querySelector("[data-phys-lab]");

@@ -20,16 +20,20 @@ core/               AR engine (ES modules, no dependencies)
   physics.js          kinematics, least-squares and outlier-robust fits
   sim.js              FreeFall (Simulate) and HandBall (Hand-hold), exact closed-form motion
   render.js           canvas drawing: realistic balls, overlays, fit plot
-lab/lab.html        lab markup (an HTML fragment)
-lab/lab.js          page wiring: reads controls, drives the core, shows results
-lab/lab.css         lab styles
+lab/                the experiment page
+  lab.html            markup (an HTML fragment)
+  lab.css             styles
+  main.js             entry: tabs and boot
+  ui.js               shared helpers: status lines, saved settings, the camera
+  modes/              one file per mode: simulate, measure, track, hold
+  assistant.js        local-LLM lab assistant (+ ollama.js, lablog.js)
 styles/base.css     theme styles the standalone page needs
 tests/              unit tests for the core
 ```
 
 The core knows nothing about `lab.html`: callers pass in video and canvas elements
 plus plain numbers, and get plain results back. `lab/lab.js` is the only file that
-knows element ids. `loader.js` injects `lab/lab.js` as a module, which imports the core.
+`lab/` is the only code that knows element ids. `loader.js` injects `lab/main.js` as a module, which imports the core.
 
 How measurements stay accurate:
 
