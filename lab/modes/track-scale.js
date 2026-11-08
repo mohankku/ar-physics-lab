@@ -1,7 +1,8 @@
 /* Auto-track scale: how camera pixels become meters.
  * Ball size (default) measures the falling ball's width each frame and uses
  * its known diameter. Tap mode sets px/m from two taps a known length apart.
- * Frame mode assumes the full frame height equals the drop height. */
+ * Frame mode assumes the full frame height equals the drop height (that
+ * field is also the fallback when the chosen method has no data). */
 import * as AR from "../../core/index.js";
 import { $, numberIn, remember, restoreSettings } from "../ui.js";
 
