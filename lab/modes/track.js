@@ -5,6 +5,7 @@ import * as AR from "../../core/index.js";
 import { $, setStatus, numberIn, onSpace, selectSwatch, remember, restoreSettings, camera, openCamera } from "../ui.js";
 import { LabLog } from "../lablog.js";
 import { TrackReview } from "./track-review.js";
+import { TrackScale } from "./track-scale.js";
 
 var R = AR.render;
 
@@ -22,6 +23,7 @@ var Track = {
   raf: 0, clock: null,
 
   auto: function() { return $("track-auto").checked; },
+  colorOpts: function() { return { target: this.target, tol: parseFloat($("track-tol").value) || 80 }; },
   status: function(msg, cls) { setStatus($("track-status"), msg, cls); },
   button: function(html) { $("btn-track-rec").innerHTML = html; },
   idleButton: function() { this.button(REC_ICON + (this.auto() ? "Arm" : "Record fall")); },
@@ -32,19 +34,22 @@ var Track = {
     self.raf = requestAnimationFrame(function() { self.loop(); });
     var frame = self.clock.next(performance.now());
     if (!frame) return; // no new camera frame since last time
-    var c = self.tracker.locate($("track-video"), {
-      target: self.target, tol: parseFloat($("track-tol").value) || 80
-    });
+    var video = $("track-video");
+    var colorOpts = self.colorOpts();
+    var c = self.tracker.locate(video, colorOpts);
     var t = frame.time / 1000;
     TrackReview.capture($("track-video"), t, !self.trigger || self.trigger.state === "recording");
     var state = "manual";
     if (self.trigger) {
       var ev = self.trigger.push(t, c);
       state = self.trigger.state;
+      // Size the ball only once it's falling: fingers can't hide its edges.
+      if (state === "recording" && !(ev && ev.type === "started")) TrackScale.observe(self.tracker, video, c, colorOpts);
       if (ev) self.onTrigger(ev);
       if (!self.active) return; // stopped this frame; the fit drew the overlay
     } else if (c) {
       self.samples.push({ t: t, y: c.y, x: c.x });
+      TrackScale.observe(self.tracker, video, c, colorOpts);
     }
     var cv = $("track-overlay");
     var dims = R.fitCanvas(cv);
@@ -73,6 +78,7 @@ var Track = {
       return;
     }
     TrackReview.reset();
+    TrackScale.reset();
     this.samples = [];
     this.trigger = this.auto() ? new AR.FallTrigger() : null;
     this.active = true;
@@ -103,13 +109,9 @@ var Track = {
   },
   toggle: function() { if (this.active) this.stop(); else this.start(); },
   fit: function() {
-    var h = numberIn("track-height", 0.05, 50, 1);
-    // Scale is in camera pixels; blank means the full frame spans h.
-    var pxPerM = parseFloat($("track-scale").value);
-    var frameH = $("track-video").videoHeight;
-    var frameHeightM = pxPerM > 0 && frameH > 0 ? frameH / pxPerM : h;
+    var scale = TrackScale.resolve();
     var pts = this.recorded().map(function(s) { return { t: s.t, y: s.y, x: s.x }; });
-    var res = AR.analyzeFall(pts, { frameHeightM: frameHeightM });
+    var res = AR.analyzeFall(pts, { frameHeightM: scale.frameHeightM });
     if (!res.ok) {
       this.status(res.error, "err");
       LabLog.push("auto-track", res.detail);
@@ -117,12 +119,14 @@ var Track = {
     }
     var fit = res.fit, err = AR.percentError(fit.g);
     LabLog.lastFit = { g: fit.g, gStdErr: fit.gStdErr, rmse: fit.rmse, n: res.points.length,
-      span: res.span, h: h, fps: res.fps, rejected: res.rejected };
+      span: res.span, h: scale.frameHeightM, fps: res.fps, rejected: res.rejected,
+      scale: scale.label + (scale.note ? " (" + scale.note + ")" : "") };
     this.status("g ≈ " + fit.g.toFixed(2) + " ± " + fit.gStdErr.toFixed(2) +
       " m/s² from " + res.points.length + " points (" + res.span.toFixed(2) + " s at " +
       Math.round(res.fps) + " fps" + (res.rejected ? ", " + res.rejected + " outlier(s) ignored" : "") +
       ", v0 ≈ " + fit.v0.toFixed(2) + " m/s, RMSE " + (fit.rmse * 100).toFixed(1) + " cm, " +
-      (err >= 0 ? "+" : "") + err.toFixed(1) + "% vs 9.81).", "ok");
+      (err >= 0 ? "+" : "") + err.toFixed(1) + "% vs 9.81; " + scale.label + ")." +
+      (scale.note ? " Note: " + scale.note + " — used frame = h instead." : ""), scale.note ? "" : "ok");
     var cv = $("track-plot");
     R.drawFitPlot(cv.getContext("2d"), R.fitCanvas(cv), res.points, fit);
     TrackReview.show(res);
@@ -131,6 +135,7 @@ var Track = {
     var self = this;
     var pane = $("mode-track");
     TrackReview.init();
+    TrackScale.init(function(msg, cls) { self.status(msg, cls); });
     pane.querySelectorAll(".swatch").forEach(function(sw) {
       sw.addEventListener("click", function() {
         selectSwatch(pane, sw);
@@ -158,6 +163,7 @@ var Track = {
       }
     });
     $("track-video").addEventListener("click", function(e) {
+      if (TrackScale.tap(e)) return; // calibration tap, not a color sample
       var video = $("track-video");
       if (!video.srcObject || !video.videoWidth) return;
       var c = self.tracker.sampleAtPoint(video, e.clientX, e.clientY);

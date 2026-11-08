@@ -34,7 +34,7 @@ var Assistant = {
       lines.push("Auto-track last fit: g=" + f.g.toFixed(2) + " ± " + f.gStdErr.toFixed(2) +
         " m/s^2 (1 sigma), camera " + Math.round(f.fps) + " fps, outliers ignored=" + f.rejected + ", RMSE=" +
         (f.rmse * 100).toFixed(1) + "cm, points=" + f.n + ", span=" +
-        f.span.toFixed(2) + "s, drop height=" + f.h.toFixed(2) + "m.");
+        f.span.toFixed(2) + "s, frame height=" + f.h.toFixed(2) + "m, " + (f.scale || "") + ".");
     } else {
       lines.push("Auto-track: no successful fit yet.");
     }
