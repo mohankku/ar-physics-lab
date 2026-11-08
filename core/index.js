@@ -22,4 +22,5 @@ export {
 } from "./vision.js";
 export { Camera, FrameClock, DEFAULT_CONSTRAINTS } from "./camera.js";
 export { FreeFall, HandBall, SPIN } from "./sim.js";
+export { FallTrigger } from "./trigger.js";
 export * as render from "./render.js";
