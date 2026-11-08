@@ -2,12 +2,12 @@
  * Auto-track analysis: tracked ball positions → a gravity measurement.
  * @module core/analysis
  */
-import { robustFitFreeFall } from "./physics.js";
+import { median, robustFitFreeFall } from "./physics.js";
 
 /**
- * @typedef {{t: number, y: number}} TrackPoint
+ * @typedef {{t: number, y: number, x?: number}} TrackPoint
  *   t: frame capture time in s (any origin); y: ball center, 0 = top of
- *   frame, 1 = bottom
+ *   frame, 1 = bottom; x (optional) likewise, 0 = left
  * @typedef {Object} FallAnalysis
  * @property {true} ok
  * @property {import("./physics.js").FreeFallFit} fit  in meters, t from fall start
@@ -16,6 +16,10 @@ import { robustFitFreeFall } from "./physics.js";
  * @property {number} fps       measured camera frame rate
  * @property {number} rejected  outlier points dropped by the fit
  * @property {number} duplicates repeated frames dropped
+ * @property {{t: number, y: number}} origin  where fit time 0 is: input time (s)
+ *   and frame fraction y — maps the fit back onto the video
+ * @property {number} frameHeightM  meters per full frame height (as given)
+ * @property {number|null} x    median ball x (frame fraction), if samples had x
  * @typedef {{ok: false, error: string, detail: string}} FallFailure
  *   error: shown to the user; detail: short log line
  */
@@ -76,6 +80,7 @@ export function analyzeFall(samples, scale) {
   // Trim pre-drop loitering: start where sustained fall begins.
   let cut = 0;
   while (cut < mks.length - 4 && mks[cut].y < 0.03 * travel) cut++;
+  const origin = { t: pts[cut].t, y: pts[cut].y };
   if (cut > 0) {
     const rt = mks[cut].t, ry = mks[cut].y;
     mks = mks.slice(cut).map((s) => ({ t: s.t - rt, y: s.y - ry }));
@@ -88,8 +93,10 @@ export function analyzeFall(samples, scale) {
       `least-squares fit failed on ${mks.length} points`);
   }
   const fps = (uniq.length - 1) / (uniq[uniq.length - 1].t - uniq[0].t);
+  const xs = pts.filter((s) => isFinite(s.x)).map((s) => s.x);
   return {
     ok: true, fit: robust.fit, points: robust.kept, span: fallSpan,
-    fps: isFinite(fps) ? fps : 0, rejected: robust.rejected, duplicates
+    fps: isFinite(fps) ? fps : 0, rejected: robust.rejected, duplicates,
+    origin, frameHeightM, x: xs.length ? median(xs) : null
   };
 }
