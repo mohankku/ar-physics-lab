@@ -18,7 +18,8 @@ export {
 } from "./physics.js";
 export { analyzeFall } from "./analysis.js";
 export {
-  ColorTracker, COLOR_PRESETS, colorPreset, colorDistSq, isSkinPixel, isBlueBackdrop
+  ColorTracker, COLOR_PRESETS, colorPreset, colorDistSq, isSkinPixel, isBlueBackdrop,
+  blobWidthInPixels
 } from "./vision.js";
 export { Camera, FrameClock, DEFAULT_CONSTRAINTS } from "./camera.js";
 export { FreeFall, HandBall, SPIN } from "./sim.js";

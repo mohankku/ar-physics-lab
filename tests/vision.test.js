@@ -1,5 +1,5 @@
 import { test, assert, near, throws } from "./harness.js";
-import { ColorTracker, colorPreset, COLOR_PRESETS, isSkinPixel, isBlueBackdrop } from "../core/vision.js";
+import { ColorTracker, colorPreset, COLOR_PRESETS, isSkinPixel, isBlueBackdrop, blobWidthInPixels } from "../core/vision.js";
 
 const RED = [229, 72, 77];
 
@@ -89,4 +89,44 @@ test("locate returns null for a video with no frame", () => {
   const tr = new ColorTracker();
   assert(tr.locate(null, {}) === null, "no video");
   assert(tr.locate({ readyState: 0, videoWidth: 0 }, {}) === null, "not ready");
+});
+
+/* RGBA image with filled discs: [cx, cy, radius, [r,g,b]]. */
+function discs(W, H, list) {
+  const d = new Uint8ClampedArray(W * H * 4).fill(255);
+  for (const [cx, cy, rad, c] of list) {
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      if ((x + 0.5 - cx) ** 2 + (y + 0.5 - cy) ** 2 <= rad * rad) {
+        const i = (y * W + x) * 4;
+        d[i] = c[0]; d[i + 1] = c[1]; d[i + 2] = c[2];
+      }
+    }
+  }
+  return d;
+}
+
+test("blobs report their bounding-box size", () => {
+  const tr = new ColorTracker();
+  const c = tr.locateInPixels(frame(160, 120, [[70, 50, 90, 60, RED]]), { target: colorPreset("red"), tol: 60 });
+  near(c.w, 20 / 160, 1e-9, "w"); near(c.h, 10 / 120, 1e-9, "h");
+});
+
+test("blobWidthInPixels measures a ball's diameter", () => {
+  for (const rad of [6, 15.5, 30]) {
+    const d = discs(100, 100, [[50, 50, rad, RED]]);
+    const w = blobWidthInPixels(d, 100, 100, 50, 50, { target: colorPreset("red"), tol: 60 });
+    near(w, 2 * rad, 1.2, "diameter " + 2 * rad);
+  }
+});
+
+test("blobWidthInPixels ignores vertical blur and other blobs", () => {
+  // A fast fall smears the ball vertically: a stadium shape, still 30 px wide.
+  const W = 120, H = 160;
+  const d = discs(W, H, [[60, 50, 15, RED], [60, 90, 15, RED], [20, 140, 18, RED]]);
+  for (let y = 50; y < 90; y++) for (let x = 45; x < 75; x++) {
+    const i = (y * W + x) * 4; d[i] = RED[0]; d[i + 1] = RED[1]; d[i + 2] = RED[2];
+  }
+  const w = blobWidthInPixels(d, W, H, 60, 70, { target: colorPreset("red"), tol: 60 });
+  near(w, 30, 1.2, "width unaffected by the smear and the other ball");
+  assert(blobWidthInPixels(discs(50, 50, []), 50, 50, 25, 25, {}) === null, "nothing there");
 });

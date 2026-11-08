@@ -50,7 +50,8 @@ export function colorPreset(name) {
  * @property {{x: number, y: number}|null} [pref] sticky lock: prefer a blob near here (0..1)
  * @property {number} [stickR=0.3] radius of the sticky lock (frame fraction)
  *
- * @typedef {{x: number, y: number, n: number}} Blob  centroid in 0..1 frame units, n pixels
+ * @typedef {{x: number, y: number, n: number, w: number, h: number}} Blob
+ *   centroid and bounding-box size in 0..1 frame units; n pixels (working size)
  */
 
 const MIN_BLOB = 12;      // pixels (working size) that count as a hit
@@ -150,6 +151,53 @@ export class ColorTracker {
     return this.sampleAt(video, (clientX - r.left) / r.width, (clientY - r.top) / r.height);
   }
 
+  /**
+   * Ball width in camera pixels, measured on a full-resolution crop around
+   * a located blob (the 160×120 working frame is too coarse for sizing).
+   * Width, not height: a falling ball blurs vertically, never sideways.
+   * @param {HTMLVideoElement} video
+   * @param {Blob} blob   from locate()
+   * @param {LocateOptions} opts  same color options as locate (motion ignored)
+   * @returns {number|null} width in camera px, or null if unreadable
+   */
+  measureWidth(video, blob, opts) {
+    if (!blob || !video || video.readyState < 2 || !video.videoWidth) return null;
+    const VW = video.videoWidth, VH = video.videoHeight;
+    // Crop: 2× the blob's box (plus margin), in camera pixels.
+    const half = Math.max(blob.w * VW, blob.h * VH, 8);
+    const sx = clamp(Math.round(blob.x * VW - half), 0, VW - 1);
+    const sy = clamp(Math.round(blob.y * VH - half), 0, VH - 1);
+    const sw = Math.max(1, Math.min(VW - sx, Math.round(2 * half)));
+    const sh = Math.max(1, Math.min(VH - sy, Math.round(2 * half)));
+    const k = Math.min(1, ROI_MAX / Math.max(sw, sh)); // keep the crop small
+    const dw = Math.max(1, Math.round(sw * k)), dh = Math.max(1, Math.round(sh * k));
+    const ctx = this._roiContext(dw, dh);
+    if (!ctx) return null;
+    let d;
+    try {
+      ctx.clearRect(0, 0, dw, dh);
+      ctx.drawImage(video, sx, sy, sw, sh, 0, 0, dw, dh);
+      d = ctx.getImageData(0, 0, dw, dh).data;
+    } catch (e) { return null; }
+    const cx = (blob.x * VW - sx) * k, cy = (blob.y * VH - sy) * k;
+    const wPx = blobWidthInPixels(d, dw, dh, cx, cy, opts);
+    return wPx ? wPx / k : null;
+  }
+
+  _roiContext(w, h) {
+    if (!this._roi) {
+      if (typeof document === "undefined" && typeof OffscreenCanvas === "undefined") return null;
+      const c = typeof OffscreenCanvas !== "undefined" ? new OffscreenCanvas(w, h) : document.createElement("canvas");
+      this._roi = { canvas: c, ctx: null };
+    }
+    const r = this._roi;
+    if (r.canvas.width !== w || r.canvas.height !== h || !r.ctx) {
+      r.canvas.width = w; r.canvas.height = h;
+      r.ctx = r.canvas.getContext("2d", { willReadFrequently: true });
+    }
+    return r.ctx;
+  }
+
   _read(video) {
     if (!video || video.readyState < 2 || !video.videoWidth) return null; // no frame yet
     const ctx = this._context();
@@ -186,35 +234,86 @@ export class ColorTracker {
     const W = this.width, H = this.height, N = W * H;
     const mask = this.mask, seen = this._seen, stack = this._stack;
     const stamp = (this._stamp = (this._stamp + 1) | 0) || (this._stamp = 1);
-    let best = 0, bestX = 0, bestY = 0;
-    let near = 0, nearX = 0, nearY = 0;
+    let best = 0, bestX = 0, bestY = 0, bestBox = null;
+    let near = 0, nearX = 0, nearY = 0, nearBox = null;
     for (let p = 0; p < N; p++) {
       if (!mask[p] || seen[p] === stamp) continue;
       let top = 0;
       stack[top++] = p; seen[p] = stamp;
       let cx = 0, cy = 0, cn = 0;
+      let x0 = W, x1 = 0, y0 = H, y1 = 0;
       while (top > 0) {
         const q = stack[--top];
         const qx = q % W, qy = (q / W) | 0;
         cx += qx; cy += qy; cn++;
+        if (qx < x0) x0 = qx; if (qx > x1) x1 = qx;
+        if (qy < y0) y0 = qy; if (qy > y1) y1 = qy;
         if (qx > 0 && mask[q - 1] && seen[q - 1] !== stamp) { seen[q - 1] = stamp; stack[top++] = q - 1; }
         if (qx < W - 1 && mask[q + 1] && seen[q + 1] !== stamp) { seen[q + 1] = stamp; stack[top++] = q + 1; }
         if (qy > 0 && mask[q - W] && seen[q - W] !== stamp) { seen[q - W] = stamp; stack[top++] = q - W; }
         if (qy < H - 1 && mask[q + W] && seen[q + W] !== stamp) { seen[q + W] = stamp; stack[top++] = q + W; }
       }
-      if (cn > best) { best = cn; bestX = cx / cn; bestY = cy / cn; }
+      if (cn > best) { best = cn; bestX = cx / cn; bestY = cy / cn; bestBox = [x0, x1, y0, y1]; }
       if (pref && cn >= MIN_BLOB) {
         const gx = cx / cn / W - pref.x, gy = cy / cn / H - pref.y;
         if (gx * gx + gy * gy < stickR * stickR && cn > near) {
-          near = cn; nearX = cx / cn; nearY = cy / cn;
+          near = cn; nearX = cx / cn; nearY = cy / cn; nearBox = [x0, x1, y0, y1];
         }
       }
     }
     // Pixel centers sit at +0.5 in working-size units.
-    if (near >= MIN_BLOB) return { x: (nearX + 0.5) / W, y: (nearY + 0.5) / H, n: near };
+    const blob = (n, x, y, b) => ({
+      x: (x + 0.5) / W, y: (y + 0.5) / H, n,
+      w: (b[1] - b[0] + 1) / W, h: (b[3] - b[2] + 1) / H // bounding box size
+    });
+    if (near >= MIN_BLOB) return blob(near, nearX, nearY, nearBox);
     if (best < MIN_BLOB) return null;
-    return { x: (bestX + 0.5) / W, y: (bestY + 0.5) / H, n: best };
+    return blob(best, bestX, bestY, bestBox);
   }
+}
+
+const ROI_MAX = 160; // largest crop side read back for measureWidth
+
+/**
+ * Width (px) of the matching blob nearest (cx, cy) in an RGBA image: the
+ * mean of its three widest rows, which steadies the edge pixels.
+ * @param {ArrayLike<number>} d  RGBA, w × h
+ * @param {LocateOptions} [opts]
+ * @returns {number|null}
+ */
+export function blobWidthInPixels(d, w, h, cx, cy, opts = {}) {
+  const N = w * h;
+  const target = opts.target || COLOR_PRESETS.red;
+  const tol = opts.tol > 0 ? opts.tol : 80, tolSq = tol * tol;
+  const mask = new Uint8Array(N);
+  let seed = -1, seedD = Infinity;
+  for (let p = 0, i = 0; p < N; p++, i += 4) {
+    const r = d[i], g = d[i + 1], b = d[i + 2];
+    let ok = opts.skin ? isSkinPixel(r, g, b)
+                       : colorDistSq(r, g, b, target.r, target.g, target.b) <= tolSq;
+    if (ok && opts.ignoreBlue && isBlueBackdrop(r, g, b)) ok = false;
+    if (!ok) continue;
+    mask[p] = 1;
+    const dx = p % w + 0.5 - cx, dy = ((p / w) | 0) + 0.5 - cy, dd = dx * dx + dy * dy;
+    if (dd < seedD) { seedD = dd; seed = p; }
+  }
+  if (seed < 0) return null;
+  // Rows of the connected component containing the seed.
+  const rows = new Int32Array(h);
+  const stack = [seed];
+  mask[seed] = 2;
+  while (stack.length) {
+    const q = stack.pop();
+    const qx = q % w, qy = (q / w) | 0;
+    rows[qy]++;
+    if (qx > 0 && mask[q - 1] === 1) { mask[q - 1] = 2; stack.push(q - 1); }
+    if (qx < w - 1 && mask[q + 1] === 1) { mask[q + 1] = 2; stack.push(q + 1); }
+    if (qy > 0 && mask[q - w] === 1) { mask[q - w] = 2; stack.push(q - w); }
+    if (qy < h - 1 && mask[q + w] === 1) { mask[q + w] = 2; stack.push(q + w); }
+  }
+  const top = Array.from(rows).sort((a, b) => b - a).slice(0, 3).filter((n) => n > 0);
+  if (!top.length) return null;
+  return top.reduce((a, b) => a + b, 0) / top.length;
 }
 
 function clamp(v, lo, hi) {
