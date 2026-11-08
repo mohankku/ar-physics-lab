@@ -19,6 +19,7 @@ var Track = {
   trigger: null,      // FallTrigger in auto mode, null in manual mode
   samples: [],        // manual mode recording
   raf: 0, clock: null,
+  replay: null,       // ReplayLoop over the last fit
 
   auto: function() { return $("track-auto").checked; },
   status: function(msg, cls) { setStatus($("track-status"), msg, cls); },
@@ -42,7 +43,7 @@ var Track = {
       if (ev) self.onTrigger(ev);
       if (!self.active) return; // stopped this frame; the fit drew the overlay
     } else if (c) {
-      self.samples.push({ t: t, y: c.y });
+      self.samples.push({ t: t, y: c.y, x: c.x });
     }
     var cv = $("track-overlay");
     var dims = R.fitCanvas(cv);
@@ -70,6 +71,7 @@ var Track = {
       this.status("Open the camera first.", "err");
       return;
     }
+    this.stopReplay();
     this.samples = [];
     this.trigger = this.auto() ? new AR.FallTrigger() : null;
     this.active = true;
@@ -105,7 +107,7 @@ var Track = {
     var pxPerM = parseFloat($("track-scale").value);
     var frameH = $("track-video").videoHeight;
     var frameHeightM = pxPerM > 0 && frameH > 0 ? frameH / pxPerM : h;
-    var pts = this.recorded().map(function(s) { return { t: s.t, y: s.y }; });
+    var pts = this.recorded().map(function(s) { return { t: s.t, y: s.y, x: s.x }; });
     var res = AR.analyzeFall(pts, { frameHeightM: frameHeightM });
     if (!res.ok) {
       this.status(res.error, "err");
@@ -122,6 +124,24 @@ var Track = {
       (err >= 0 ? "+" : "") + err.toFixed(1) + "% vs 9.81).", "ok");
     var cv = $("track-plot");
     R.drawFitPlot(cv.getContext("2d"), R.fitCanvas(cv), res.points, fit);
+    this.startReplay(res);
+  },
+  /* Slow-motion replay of the fit over the video, beside a 9.81 ghost. */
+  startReplay: function(res) {
+    this.stopReplay();
+    var path = AR.fallPath(res);
+    var cv = $("track-overlay");
+    var opts = { ghost: $("track-ghost").checked, measuredG: res.fit.g };
+    this.replay = new AR.ReplayLoop(res.span, function(tau) {
+      AR.drawReplay(cv.getContext("2d"), R.fitCanvas(cv), path, tau, opts);
+    });
+    this.replay.start();
+  },
+  stopReplay: function() {
+    if (this.replay) this.replay.stop();
+    this.replay = null;
+    var cv = $("track-overlay");
+    cv.getContext("2d").clearRect(0, 0, cv.width, cv.height);
   },
   init: function() {
     var self = this;
@@ -146,6 +166,7 @@ var Track = {
       }, function() {});
     });
     camera.onChange(function(live) {
+      if (live !== $("track-video")) self.stopReplay();
       if (self.active && live !== $("track-video")) {
         self.cancel();
         self.status("Camera moved to another mode — recording stopped.", "err");
@@ -164,6 +185,7 @@ var Track = {
     $("btn-track-rec").addEventListener("click", function() { self.toggle(); });
     $("btn-track-clear").addEventListener("click", function() {
       self.cancel();
+      self.stopReplay();
       self.samples = [];
       self.trigger = null;
       $("track-count").textContent = "0";

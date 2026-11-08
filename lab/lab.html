@@ -143,7 +143,8 @@
     a brightly colored ball still in view. Let go — recording starts and stops by itself. The
     page tracks the ball each camera frame, converts pixels to meters, and fits
     <code>y = y0 + v0·t + ½·g·t²</code>. Untick <strong>Auto start/stop</strong> to press
-    Record and Stop yourself. Tip: a red ball against a white wall works best.</p>
+    Record and Stop yourself. After each fit the fall replays in slow motion over the video,
+    next to a faint ghost ball falling at 9.81 m/s². Tip: a red ball against a white wall works best.</p>
     <div class="stage" id="track-stage">
       <video id="track-video" autoplay muted playsinline></video>
       <canvas class="overlay" id="track-overlay"></canvas>
@@ -166,6 +167,9 @@
       </label>
       <label class="phys-field" style="flex-direction:row; align-items:center; gap:6px;">
         <input id="track-auto" type="checkbox" checked> Auto start/stop
+      </label>
+      <label class="phys-field" style="flex-direction:row; align-items:center; gap:6px;">
+        <input id="track-ghost" type="checkbox" checked> 9.81 ghost in replay
       </label>
       <label class="phys-field">Scale (camera px per meter, blank = full frame = h)
         <input id="track-scale" type="number" min="1" step="1" placeholder="auto">
