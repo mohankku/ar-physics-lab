@@ -131,8 +131,8 @@ export function drawFallScene(ctx, dims, fall, opts = {}) {
 }
 
 /* Auto-track overlay: a ring on the tracked point {x, y} (0..1). */
-export function drawTrackMarker(ctx, dims, c) {
-  ctx.strokeStyle = "#4ecd64";
+export function drawTrackMarker(ctx, dims, c, color = "#4ecd64") {
+  ctx.strokeStyle = color;
   ctx.lineWidth = 2 * dims.dpr;
   ctx.beginPath();
   ctx.arc(c.x * dims.w, c.y * dims.h, 12 * dims.dpr, 0, 2 * Math.PI);

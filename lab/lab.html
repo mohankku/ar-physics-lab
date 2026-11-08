@@ -139,10 +139,11 @@
   <!-- MODE 3 -->
   <div class="phys-mode" id="mode-track" hidden>
     <h3><i class="fa-solid fa-crosshairs"></i> Auto-track a falling ball</h3>
-    <p class="desc">Point the camera at a plain background and drop a brightly colored ball
-    through the frame. The page tracks its centroid each frame, converts pixels to meters,
-    and fits <code>y = y0 + v0·t + ½·g·t²</code> (press Record just before you drop).
-    Tip: a red ball against a white wall works best.</p>
+    <p class="desc">Point the camera at a plain background, press <strong>Arm</strong>, and hold
+    a brightly colored ball still in view. Let go — recording starts and stops by itself. The
+    page tracks the ball each camera frame, converts pixels to meters, and fits
+    <code>y = y0 + v0·t + ½·g·t²</code>. Untick <strong>Auto start/stop</strong> to press
+    Record and Stop yourself. Tip: a red ball against a white wall works best.</p>
     <div class="stage" id="track-stage">
       <video id="track-video" autoplay muted playsinline></video>
       <canvas class="overlay" id="track-overlay"></canvas>
@@ -163,13 +164,16 @@
       <label class="phys-field">Drop height h (m)
         <input id="track-height" type="number" value="1" min="0.05" max="50" step="0.05">
       </label>
+      <label class="phys-field" style="flex-direction:row; align-items:center; gap:6px;">
+        <input id="track-auto" type="checkbox" checked> Auto start/stop
+      </label>
       <label class="phys-field">Scale (camera px per meter, blank = full frame = h)
         <input id="track-scale" type="number" min="1" step="1" placeholder="auto">
       </label>
     </div>
     <div class="phys-btn-row">
       <button class="pub-btn" id="btn-track-cam" type="button"><i class="fa-solid fa-video"></i> Open camera</button>
-      <button class="pub-btn" id="btn-track-rec" type="button" title="Record / stop (Space)"><i class="fa-solid fa-circle"></i> Record fall</button>
+      <button class="pub-btn" id="btn-track-rec" type="button" title="Arm / record / stop (Space)"><i class="fa-solid fa-circle"></i> Arm</button>
       <button class="pub-btn" id="btn-track-clear" type="button"><i class="fa-solid fa-trash"></i> Clear</button>
       <span class="phys-status" style="margin-left:auto;">points: <span id="track-count">0</span></span>
     </div>
