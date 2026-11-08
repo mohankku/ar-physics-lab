@@ -1,22 +1,18 @@
 /* AR Physics Lab — page wiring for Exp 01 (free-fall gravity).
- * Reads lab.html's controls, drives the engine in core/ar-core.js and writes
- * results back to the page. Camera, tracking, rendering and physics live in
- * the core; this file is the only one that knows element ids. */
-(function() {
-"use strict";
+ * Reads lab.html's controls, drives the engine in core/ and writes results
+ * back to the page. Camera, tracking, rendering and physics live in the
+ * core; this file is the only one that knows element ids. */
+import * as AR from "../core/index.js";
 
-var AR = window.ARCore;
-if (!AR) {
-  if (window.console) console.error("AR Physics Lab: core/ar-core.js must load before lab/lab.js");
-  return;
-}
-var K = AR.physics, R = AR.render;
+var K = AR, R = AR.render;
+var camera = new AR.Camera();
 
-// Older public name for the pure helpers.
+// Globals for the console and older callers.
+window.ARCore = AR;
 window.PhysLab = {
   fallTime: K.fallTime, gravityFromDrop: K.gravityFromDrop,
   mean: K.mean, std: K.std, fitGravity: K.fitGravity, fitFreeFall: K.fitFreeFall,
-  colorDistSq: AR.color.colorDistSq
+  colorDistSq: AR.colorDistSq
 };
 
 /* ---------- small page helpers ---------- */
@@ -76,18 +72,20 @@ function ballStyle(sel) {
 
 /* ---------- camera ---------- */
 function openCamera(video, statusEl) {
-  return AR.Camera.start(video).then(function() {
+  return camera.start(video).then(function() {
     setStatus(statusEl, "Camera on — video stays on this device.", "ok");
   }, function(err) {
+    if (err && err.name === "AbortError") throw err; // a newer camera request took over
     var msg = "Camera blocked — simulation still works without it.";
     if (err && err.name === "NoCameraApi") msg = "Camera API not available in this browser.";
+    else if (err && err.name === "NotFoundError") msg = "No camera found on this device.";
     else if (err && err.name === "NotAllowedError") msg = "Camera permission denied — simulation still works without it.";
     setStatus(statusEl, msg, "err");
     throw err;
   });
 }
 // Show the "camera off" hint on every stage except the live one.
-AR.Camera.onChange(function(live) {
+camera.onChange(function(live) {
   document.querySelectorAll("#phys-lab .stage").forEach(function(st) {
     st.classList.toggle("cam-on", !!live && st.querySelector("video") === live);
   });
@@ -129,22 +127,24 @@ var Sim = {
   },
   drop: function() {
     var self = this;
+    var start = this.params();
     this.cancel();
-    this.fall.reset();
+    this.fall.reset(start.g, start.h); // g and h are fixed for this drop
     this.running = true;
     this.last = performance.now();
     setStatus($("sim-status"), "Ball falling…", "");
     var step = function(now) {
-      var p = self.params();
-      var dt = Math.min(0.05, (now - self.last) / 1000 * p.slow);
+      var p = self.params(); // slow motion and trail may change mid-fall
+      // Cap the step so a backgrounded tab resumes instead of jumping to the end.
+      var dt = Math.min(0.05, (now - self.last) / 1000) * p.slow;
       self.last = now;
-      var landed = self.fall.step(dt, p.g, p.h, p.trail);
+      var landed = self.fall.step(dt, p.trail);
       self.draw(p);
-      self.readout(p);
+      self.readout();
       if (landed) {
         self.running = false;
         setStatus($("sim-status"), "Landed in " + self.fall.t.toFixed(3) +
-          " s (theory " + K.fallTime(p.h, p.g).toFixed(3) + " s).", "ok");
+          " s (theory " + self.fall.landingTime.toFixed(3) + " s).", "ok");
         return;
       }
       self.raf = requestAnimationFrame(step);
@@ -158,21 +158,22 @@ var Sim = {
   },
   reset: function() {
     this.cancel();
-    this.fall.reset();
     var p = this.params();
-    this.draw(p); this.readout(p);
+    this.fall.reset(p.g, p.h);
+    this.draw(p); this.readout();
     setStatus($("sim-status"), "Ready — press Drop.", "");
   },
   draw: function(p) {
     var cv = $("sim-overlay");
     var dims = R.fitCanvas(cv);
-    R.drawFallScene(cv.getContext("2d"), dims, this.fall, p);
+    R.drawFallScene(cv.getContext("2d"), dims, this.fall, { trail: p.trail });
   },
-  readout: function(p) {
-    $("ro-t").textContent = this.fall.t.toFixed(3) + " s";
-    $("ro-y").textContent = Math.min(this.fall.y, p.h).toFixed(2) + " m";
-    $("ro-v").textContent = this.fall.v.toFixed(2) + " m/s";
-    $("ro-theory").textContent = K.fallTime(p.h, p.g).toFixed(3) + " s";
+  readout: function() {
+    var f = this.fall;
+    $("ro-t").textContent = f.t.toFixed(3) + " s";
+    $("ro-y").textContent = f.y.toFixed(2) + " m";
+    $("ro-v").textContent = f.v.toFixed(2) + " m/s";
+    $("ro-theory").textContent = f.landingTime.toFixed(3) + " s";
   },
   init: function() {
     var self = this;
@@ -317,37 +318,38 @@ var LabLog = {
 /* ---------- MODE 3: auto-track a real falling ball ---------- */
 var Track = {
   tracker: new AR.ColorTracker(),
-  target: AR.color.preset("red"),
-  recording: false, samples: [], t0: 0, raf: 0,
+  target: AR.colorPreset("red"),
+  recording: false, samples: [], raf: 0, clock: null,
   loop: function() {
     var self = this;
     if (!self.recording) return;
+    self.raf = requestAnimationFrame(function() { self.loop(); });
+    var frame = self.clock.next(performance.now());
+    if (!frame) return; // no new camera frame since last time
     var c = self.tracker.locate($("track-video"), {
       target: self.target, tol: parseFloat($("track-tol").value) || 80
     });
-    var now = (performance.now() - self.t0) / 1000;
     var cv = $("track-overlay");
     var dims = R.fitCanvas(cv);
-    if (dims.w > 2) {
-      // (A collapsed canvas means the pane is hidden: skip the sample.)
-      var ctx = cv.getContext("2d");
-      ctx.clearRect(0, 0, dims.w, dims.h);
-      if (c) {
-        self.samples.push({ t: now, yPx: c.y * dims.h });
-        R.drawTrackMarker(ctx, dims, c);
-      }
-      $("track-count").textContent = String(self.samples.length);
+    var ctx = cv.getContext("2d");
+    ctx.clearRect(0, 0, dims.w, dims.h);
+    if (c) {
+      self.samples.push({ t: frame.time / 1000, y: c.y });
+      R.drawTrackMarker(ctx, dims, c);
     }
-    self.raf = requestAnimationFrame(function() { self.loop(); });
+    $("track-count").textContent = String(self.samples.length);
   },
   start: function() {
-    if (AR.Camera.liveVideo() !== $("track-video")) {
+    var video = $("track-video");
+    if (camera.liveVideo() !== video) {
       setStatus($("track-status"), "Open the camera first.", "err");
       return;
     }
     this.samples = [];
     this.recording = true;
-    this.t0 = performance.now();
+    this.tracker.reset();
+    this.clock = new AR.FrameClock(video);
+    this.clock.start();
     $("btn-track-rec").innerHTML = '<i class="fa-solid fa-stop"></i> Stop & fit';
     setStatus($("track-status"), "Recording — drop the ball through the frame.", "");
     this.loop();
@@ -356,6 +358,7 @@ var Track = {
     this.recording = false;
     if (this.raf) cancelAnimationFrame(this.raf);
     this.raf = 0;
+    if (this.clock) this.clock.stop();
     $("btn-track-rec").innerHTML = '<i class="fa-solid fa-circle"></i> Record fall';
   },
   stop: function() {
@@ -365,19 +368,24 @@ var Track = {
   toggle: function() { if (this.recording) this.stop(); else this.start(); },
   fit: function() {
     var h = numberIn("track-height", 0.05, 50, 1);
+    // Scale is in camera pixels; blank means the full frame spans h.
     var pxPerM = parseFloat($("track-scale").value);
-    if (!(pxPerM > 0)) pxPerM = $("track-overlay").height / h; // full frame = drop height
-    var res = AR.analyzeFall(this.samples, pxPerM);
+    var frameH = $("track-video").videoHeight;
+    var frameHeightM = pxPerM > 0 && frameH > 0 ? frameH / pxPerM : h;
+    var res = AR.analyzeFall(this.samples, { frameHeightM: frameHeightM });
     if (!res.ok) {
       setStatus($("track-status"), res.error, "err");
       LabLog.push("auto-track", res.detail);
       return;
     }
     var fit = res.fit, err = K.percentError(fit.g);
-    LabLog.lastFit = { g: fit.g, rmse: fit.rmse, n: res.points.length, span: res.span, h: h };
-    setStatus($("track-status"), "g ≈ " + fit.g.toFixed(2) + " m/s² from " + res.points.length +
-      " points (" + res.span.toFixed(2) + " s, v0 ≈ " + fit.v0.toFixed(2) + " m/s, RMSE " +
-      (fit.rmse * 100).toFixed(1) + " cm, " + (err >= 0 ? "+" : "") + err.toFixed(1) + "% vs 9.81).", "ok");
+    LabLog.lastFit = { g: fit.g, gStdErr: fit.gStdErr, rmse: fit.rmse, n: res.points.length,
+      span: res.span, h: h, fps: res.fps, rejected: res.rejected };
+    setStatus($("track-status"), "g ≈ " + fit.g.toFixed(2) + " ± " + fit.gStdErr.toFixed(2) +
+      " m/s² from " + res.points.length + " points (" + res.span.toFixed(2) + " s at " +
+      Math.round(res.fps) + " fps" + (res.rejected ? ", " + res.rejected + " outlier(s) ignored" : "") +
+      ", v0 ≈ " + fit.v0.toFixed(2) + " m/s, RMSE " + (fit.rmse * 100).toFixed(1) + " cm, " +
+      (err >= 0 ? "+" : "") + err.toFixed(1) + "% vs 9.81).", "ok");
     var cv = $("track-plot");
     R.drawFitPlot(cv.getContext("2d"), R.fitCanvas(cv), res.points, fit);
   },
@@ -387,7 +395,7 @@ var Track = {
     pane.querySelectorAll(".swatch").forEach(function(sw) {
       sw.addEventListener("click", function() {
         selectSwatch(pane, sw);
-        self.target = AR.color.preset(sw.getAttribute("data-color"));
+        self.target = AR.colorPreset(sw.getAttribute("data-color"));
         setStatus($("track-status"), "Tracking " + sw.getAttribute("data-color") + " — or click the video to sample.", "");
       });
     });
@@ -398,7 +406,7 @@ var Track = {
         R.fitCanvas($("track-overlay"));
       }, function() {});
     });
-    AR.Camera.onChange(function(live) {
+    camera.onChange(function(live) {
       if (self.recording && live !== $("track-video")) {
         self.cancel();
         setStatus($("track-status"), "Camera moved to another mode — recording stopped.", "err");
@@ -407,15 +415,12 @@ var Track = {
     $("track-video").addEventListener("click", function(e) {
       var video = $("track-video");
       if (!video.srcObject || !video.videoWidth) return;
-      try {
-        var c = self.tracker.sampleAtPoint(video, e.clientX, e.clientY);
-        self.target = c;
-        selectSwatch(pane, null);
-        setStatus($("track-status"),
-          "Sampled color rgb(" + c.r + "," + c.g + "," + c.b + ") — press Record fall.", "ok");
-      } catch (err) {
-        setStatus($("track-status"), "Could not sample that pixel.", "err");
-      }
+      var c = self.tracker.sampleAtPoint(video, e.clientX, e.clientY);
+      if (!c) { setStatus($("track-status"), "Could not sample that pixel.", "err"); return; }
+      self.target = c;
+      selectSwatch(pane, null);
+      setStatus($("track-status"),
+        "Sampled color rgb(" + c.r + "," + c.g + "," + c.b + ") — press Record fall.", "ok");
     });
     $("btn-track-rec").addEventListener("click", function() { self.toggle(); });
     $("btn-track-clear").addEventListener("click", function() {
@@ -436,9 +441,9 @@ var HOLD_SETTINGS = [["hold-gravity", "hold-g"], ["hold-g-custom", "hold-gc"],
 var Hold = {
   hb: new AR.HandBall(),
   tracker: new AR.ColorTracker(),
-  target: AR.color.preset("red"),
+  target: AR.colorPreset("red"),
   useSkin: true, // matches the pre-selected Skin swatch in the markup
-  raf: 0, live: false,
+  raf: 0, live: false, clock: null,
   params: function() {
     return {
       g: readGravity("hold-gravity", "hold-g-custom"),
@@ -461,13 +466,18 @@ var Hold = {
     }
     var p = self.params();
     var video = $("hold-video");
-    var ev = hb.update(now, p, function(motion, pref) {
-      return self.tracker.locate(video, {
-        target: self.target, tol: p.tol, skin: self.useSkin,
-        motion: motion, ignoreBlue: $("hold-blue").checked, pref: pref
+    // Track the hand once per camera frame; animate the fall every frame.
+    if (self.clock.next(now)) {
+      var ev = hb.track(now, p, function(motion, pref) {
+        return self.tracker.locate(video, {
+          target: self.target, tol: p.tol, skin: self.useSkin,
+          motion: motion, ignoreBlue: $("hold-blue").checked, pref: pref
+        });
       });
-    });
-    if (ev) self.report(ev, p.g);
+      if (ev) self.report(ev);
+    }
+    var landed = hb.tick(now);
+    if (landed) self.report(landed);
     var cv = $("hold-overlay");
     R.drawHandScene(cv.getContext("2d"), R.fitCanvas(cv), hb, {
       h: p.h, dropLine: p.dropLine, tracker: $("hold-mask").checked ? self.tracker : null
@@ -475,15 +485,17 @@ var Hold = {
     $("ro-h-y").textContent = hb.fix ? hb.yM.toFixed(2) + " m" : "—";
     $("ro-h-v").textContent = hb.fix ? hb.speed().toFixed(1) + " f/s" : "—";
     $("ro-h-t").textContent = hb.t.toFixed(3) + " s";
-    $("ro-h-theory").textContent = hb.fix ?
-      K.fallTime(Math.max(0.01, hb.dropHeight()), p.g).toFixed(3) + " s" : "—";
+    var g = hb.falling || hb.landed ? hb.g : p.g;
+    $("ro-h-theory").textContent = hb.fix || hb.falling || hb.landed ?
+      K.fallTime(Math.max(0.01, hb.dropHeight()), g).toFixed(3) + " s" : "—";
   },
   /* Turn a HandBall event into a status line. */
-  report: function(ev, g) {
+  report: function(ev) {
     var st = $("hold-status");
     if (ev.type === "landed") {
-      setStatus(st, "Landed in " + ev.t.toFixed(3) + " s from " + ev.h0.toFixed(2) +
-        " m (theory " + K.fallTime(ev.h0, g).toFixed(3) + " s). Press Hold again to pick it up.", "ok");
+      var fromRest = this.hb.v0 > 0 ? " (thrown at " + this.hb.v0.toFixed(1) + " m/s)" : "";
+      setStatus(st, "Landed in " + ev.t.toFixed(3) + " s from " + ev.h0.toFixed(2) + " m" + fromRest +
+        " — from rest it would take " + K.fallTime(ev.h0, this.hb.g).toFixed(3) + " s. Press Hold again to pick it up.", "ok");
     } else if (ev.type === "lost") {
       setStatus(st, "Hand lost — move it back into view.", "");
     } else if (ev.type === "released") {
@@ -497,8 +509,9 @@ var Hold = {
     }
   },
   release: function() {
-    var ev = this.hb.drop(0, "button", performance.now());
-    if (ev) this.report(ev, this.params().g);
+    var p = this.params();
+    var ev = this.hb.drop(performance.now(), p.g, 0, "button", p.h);
+    if (ev) this.report(ev);
   },
   pickUp: function() {
     var had = this.hb.pickUp();
@@ -508,6 +521,7 @@ var Hold = {
     this.live = false;
     if (this.raf) cancelAnimationFrame(this.raf);
     this.raf = 0;
+    if (this.clock) this.clock.stop();
     var cv = $("hold-overlay");
     cv.getContext("2d").clearRect(0, 0, cv.width, cv.height);
   },
@@ -533,7 +547,7 @@ var Hold = {
           self.setColorMode(true);
           setStatus($("hold-status"), "Skin mode — no click needed. Keep the hand moving.", "ok");
         } else {
-          self.setColorMode(false, AR.color.preset(name));
+          self.setColorMode(false, AR.colorPreset(name));
           setStatus($("hold-status"), "Tracking " + name + " — or click your hand in the video.", "");
         }
       });
@@ -543,6 +557,9 @@ var Hold = {
         R.fitCanvas($("hold-overlay"));
         if (!self.live) {
           self.live = true;
+          self.tracker.reset();
+          self.clock = new AR.FrameClock($("hold-video"));
+          self.clock.start();
           self.hb.start(performance.now());
           self.raf = requestAnimationFrame(function(n) { self.loop(n); });
         }
@@ -550,21 +567,18 @@ var Hold = {
       }, function() {});
     });
     // Another mode took the camera: stop tracking a dead feed.
-    AR.Camera.onChange(function(live) {
+    camera.onChange(function(live) {
       if (self.live && live !== $("hold-video")) self.stopLoop();
     });
     $("hold-video").addEventListener("click", function(e) {
       var video = $("hold-video");
       if (!video.srcObject || !video.videoWidth) return;
-      try {
-        var c = self.tracker.sampleAtPoint(video, e.clientX, e.clientY);
-        self.setColorMode(false, c);
-        selectSwatch(pane, null);
-        setStatus($("hold-status"),
-          "Sampled rgb(" + c.r + "," + c.g + "," + c.b + ") — move your hand, the ball follows.", "ok");
-      } catch (err) {
-        setStatus($("hold-status"), "Could not sample that pixel.", "err");
-      }
+      var c = self.tracker.sampleAtPoint(video, e.clientX, e.clientY);
+      if (!c) { setStatus($("hold-status"), "Could not sample that pixel.", "err"); return; }
+      self.setColorMode(false, c);
+      selectSwatch(pane, null);
+      setStatus($("hold-status"),
+        "Sampled rgb(" + c.r + "," + c.g + "," + c.b + ") — move your hand, the ball follows.", "ok");
     });
     $("btn-hold-drop").addEventListener("click", function() { self.release(); });
     $("btn-hold-reset").addEventListener("click", function() { self.pickUp(); });
@@ -627,7 +641,8 @@ var Assistant = {
     }
     if (LabLog.lastFit) {
       var f = LabLog.lastFit;
-      lines.push("Auto-track last fit: g=" + f.g.toFixed(2) + " m/s^2, RMSE=" +
+      lines.push("Auto-track last fit: g=" + f.g.toFixed(2) + " ± " + f.gStdErr.toFixed(2) +
+        " m/s^2 (1 sigma), camera " + Math.round(f.fps) + " fps, outliers ignored=" + f.rejected + ", RMSE=" +
         (f.rmse * 100).toFixed(1) + "cm, points=" + f.n + ", span=" +
         f.span.toFixed(2) + "s, drop height=" + f.h.toFixed(2) + "m.");
     } else {
@@ -703,7 +718,7 @@ var Assistant = {
     self.refreshContext();
     setInterval(function() { self.refreshContext(); }, 3000);
     $("btn-ask-setup").addEventListener("click", function() {
-      var b64 = AR.Camera.snapshot(512, 0.72);
+      var b64 = camera.snapshot(512, 0.72);
       if (!b64) { self.say("Error: open any lab camera first (Simulate, Auto-track, or Hand-hold).", "err"); return; }
       self.run("setup", null, b64);
     });
@@ -732,12 +747,10 @@ function boot() {
   Track.init();
   Hold.init();
   Assistant.init();
-  window.addEventListener("beforeunload", function() { AR.Camera.stopAll(); });
+  window.addEventListener("beforeunload", function() { camera.stopAll(); });
 }
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", boot);
 } else {
   boot();
 }
-
-})();

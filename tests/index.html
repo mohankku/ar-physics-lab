@@ -7,32 +7,36 @@
   <style>
     body { font: 14px/1.5 system-ui, sans-serif; margin: 24px 16px; background: #fff; color: #111; }
     .pass { color: #0a7a4b; } .fail { color: #b42318; }
-    pre { margin: 2px 0 8px 18px; white-space: pre-wrap; }
+    pre { margin: 2px 0 8px 18px; white-space: pre-wrap; font-size: 12px; }
   </style>
 </head>
 <body>
-  <h1>core/ar-core.js tests</h1>
+  <h1>AR core tests</h1>
   <p id="summary">Running…</p>
   <ul id="results"></ul>
-  <script>
-    /* Minimal test runner with the same call shape as node:test. */
-    window.miniTest = (function() {
-      var pass = 0, fail = 0;
-      function run(name, fn) {
-        var li = document.createElement("li");
-        try { fn(); pass++; li.className = "pass"; li.textContent = "✓ " + name; }
-        catch (e) {
-          fail++; li.className = "fail"; li.textContent = "✗ " + name;
-          var pre = document.createElement("pre"); pre.textContent = e.message; li.appendChild(pre);
-        }
-        document.getElementById("results").appendChild(li);
-        document.getElementById("summary").textContent = pass + " passed, " + fail + " failed";
-        document.body.setAttribute("data-result", fail ? "fail" : "pass");
+  <script type="module">
+    import { runAll } from "./harness.js";
+    const files = ["physics", "analysis", "vision", "camera", "sim"];
+    const summary = document.getElementById("summary");
+    try {
+      for (const f of files) await import(`./${f}.test.js`);
+      const { pass, fail, results } = await runAll();
+      const ul = document.getElementById("results");
+      for (const r of results) {
+        const li = document.createElement("li");
+        li.className = r.ok ? "pass" : "fail";
+        li.textContent = (r.ok ? "✓ " : "✗ ") + r.name;
+        if (!r.ok) { const pre = document.createElement("pre"); pre.textContent = r.error; li.appendChild(pre); }
+        ul.appendChild(li);
       }
-      return run;
-    })();
+      summary.textContent = `${pass} passed, ${fail} failed`;
+      document.title = fail
+        ? `FAIL ${fail}/${pass + fail}: ` + results.filter((r) => !r.ok).map((r) => r.name + " — " + r.error.split("\n")[0]).join(" || ")
+        : `PASS ${pass}`;
+    } catch (e) {
+      summary.textContent = "Test files failed to load: " + e;
+      document.title = "ERROR " + e;
+    }
   </script>
-  <script src="../core/ar-core.js"></script>
-  <script src="ar-core.test.js"></script>
 </body>
 </html>

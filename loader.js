@@ -1,9 +1,9 @@
 /* AR Physics Lab loader.
  * Usage: <div data-phys-lab></div> <script src=".../loader.js" defer></script>
- * Fetches lab/lab.html into the container, then adds lab/lab.css, the AR
- * engine (core/ar-core.js) and the page wiring (lab/lab.js), all resolved
- * relative to this script. Keep this file at the repo root: other sites
- * embed it by URL. */
+ * Fetches lab/lab.html into the container, then adds lab/lab.css and the
+ * page wiring lab/lab.js (an ES module that imports the AR engine from
+ * core/), all resolved relative to this script. Keep this file at the repo
+ * root: other sites embed it by URL. */
 (function() {
   "use strict";
   var me = document.currentScript;
@@ -11,7 +11,7 @@
 
   var CSS = "lab/lab.css";
   var HTML = "lab/lab.html";
-  var SCRIPTS = ["core/ar-core.js", "lab/lab.js"]; // run in this order
+  var MODULE = "lab/lab.js";
 
   function start() {
     var root = document.querySelector("[data-phys-lab]");
@@ -29,12 +29,13 @@
       })
       .then(function(html) {
         root.innerHTML = html;
-        SCRIPTS.forEach(function(src) {
-          var js = document.createElement("script");
-          js.src = base + src;
-          js.async = false; // injected scripts run in insertion order
-          document.body.appendChild(js);
-        });
+        var js = document.createElement("script");
+        js.type = "module";
+        js.src = base + MODULE;
+        js.onerror = function() {
+          root.insertAdjacentText("afterbegin", "Could not load the lab's scripts. Try reloading.");
+        };
+        document.body.appendChild(js);
       })
       .catch(function(err) {
         root.textContent = "Could not load the AR Physics Lab (" + err.message + "). Try reloading.";
