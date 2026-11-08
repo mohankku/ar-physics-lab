@@ -18,6 +18,9 @@ export {
 } from "./physics.js";
 export { analyzeFall } from "./analysis.js";
 export {
+  resolveScale, scaleFromBallWidths, scaleFromPoints, clientToCamera, BALL_DIAMETERS
+} from "./calibration.js";
+export {
   ColorTracker, COLOR_PRESETS, colorPreset, colorDistSq, isSkinPixel, isBlueBackdrop,
   blobWidthInPixels
 } from "./vision.js";
