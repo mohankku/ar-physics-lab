@@ -1,0 +1,9 @@
+{
+  "name": "ar-physics-lab",
+  "private": true,
+  "description": "In-browser camera physics experiments. No build step; this file only marks the JS as ES modules and defines the test command.",
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/"
+  }
+}

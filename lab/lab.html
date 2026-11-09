@@ -1,4 +1,4 @@
-<!-- AR Physics Lab markup. Injected by ../loader.js (index.html here, and mohankku.github.io/physics). Logic: lab.js + ../core/ar-core.js. -->
+<!-- AR Physics Lab markup. Injected by ../loader.js (index.html here, and mohankku.github.io/physics). Logic: main.js, modes/ and ../core/. -->
 <div class="phys-lab" id="phys-lab">
 
   <div class="phys-hero">
@@ -139,14 +139,24 @@
   <!-- MODE 3 -->
   <div class="phys-mode" id="mode-track" hidden>
     <h3><i class="fa-solid fa-crosshairs"></i> Auto-track a falling ball</h3>
-    <p class="desc">Point the camera at a plain background and drop a brightly colored ball
-    through the frame. The page tracks its centroid each frame, converts pixels to meters,
-    and fits <code>y = y0 + v0·t + ½·g·t²</code> (press Record just before you drop).
-    Tip: a red ball against a white wall works best.</p>
+    <p class="desc">Point the camera at a plain background, press <strong>Arm</strong>, and hold
+    a brightly colored ball still in view. Let go — recording starts and stops by itself. The
+    page tracks the ball each camera frame, converts pixels to meters, and fits
+    <code>y = y0 + v0·t + ½·g·t²</code>. Untick <strong>Auto start/stop</strong> to press
+    Record and Stop yourself. After each fit the fall replays in slow motion over the video,
+    next to a faint ghost ball falling at 9.81 m/s²; drag the slider to step through the
+    recorded frames. <strong>Scale:</strong> pick your ball and its known size sets the
+    pixels-to-meters scale automatically; or tap the two ends of something of known length;
+    or fall back to "the frame is h meters tall". Tip: a red ball against a white wall works best.</p>
     <div class="stage" id="track-stage">
       <video id="track-video" autoplay muted playsinline></video>
       <canvas class="overlay" id="track-overlay"></canvas>
       <div class="stage-empty"><span><i class="fa-solid fa-video"></i> Camera off.</span><span>Open the camera, then click the ball in the video to sample its color.</span></div>
+    </div>
+    <div class="phys-btn-row scrub-row" id="track-review" hidden>
+      <button class="pub-btn" id="btn-track-play" type="button"><i class="fa-solid fa-play"></i> Replay</button>
+      <input id="track-scrub" type="range" min="0" max="0" value="0" step="1" aria-label="Step through the recorded fall, frame by frame">
+      <span class="phys-status" id="track-scrub-t">slow-motion replay</span>
     </div>
     <div class="phys-controls">
       <div class="phys-field">Ball color
@@ -160,16 +170,39 @@
       <label class="phys-field">Tolerance
         <input id="track-tol" type="range" min="30" max="150" value="80" step="5">
       </label>
-      <label class="phys-field">Drop height h (m)
+      <label class="phys-field" style="flex-direction:row; align-items:center; gap:6px;">
+        <input id="track-auto" type="checkbox" checked> Auto start/stop
+      </label>
+      <label class="phys-field" style="flex-direction:row; align-items:center; gap:6px;">
+        <input id="track-ghost" type="checkbox" checked> 9.81 ghost in replay
+      </label>
+      <label class="phys-field">Scale from
+        <select id="track-scale-mode">
+          <option value="ball" selected>Ball size</option>
+          <option value="pixels">Tap / px per meter</option>
+          <option value="frame">Frame = drop height</option>
+        </select>
+      </label>
+      <label class="phys-field" data-scale="frame">Frame height h (m)
         <input id="track-height" type="number" value="1" min="0.05" max="50" step="0.05">
       </label>
-      <label class="phys-field">Scale (px per meter, blank = full frame = h)
-        <input id="track-scale" type="number" min="1" step="1" placeholder="auto">
+      <label class="phys-field" data-scale="ball">Ball
+        <select id="track-ball-kind"><option value="custom">Custom…</option></select>
       </label>
+      <label class="phys-field" data-scale="ball">Diameter (cm)
+        <input id="track-ball-d" type="number" value="6.7" min="0.5" max="100" step="0.1">
+      </label>
+      <label class="phys-field" data-scale="pixels">Camera px per meter
+        <input id="track-scale" type="number" min="1" step="1" placeholder="tap to set">
+      </label>
+      <label class="phys-field" data-scale="pixels">Tap length (m)
+        <input id="track-cal-len" type="number" value="1" min="0.01" max="50" step="0.01">
+      </label>
+      <button class="pub-btn" id="btn-track-cal" type="button" data-scale="pixels"><i class="fa-solid fa-ruler"></i> Tap to calibrate</button>
     </div>
     <div class="phys-btn-row">
       <button class="pub-btn" id="btn-track-cam" type="button"><i class="fa-solid fa-video"></i> Open camera</button>
-      <button class="pub-btn" id="btn-track-rec" type="button" title="Record / stop (Space)"><i class="fa-solid fa-circle"></i> Record fall</button>
+      <button class="pub-btn" id="btn-track-rec" type="button" title="Arm / record / stop (Space)"><i class="fa-solid fa-circle"></i> Arm</button>
       <button class="pub-btn" id="btn-track-clear" type="button"><i class="fa-solid fa-trash"></i> Clear</button>
       <span class="phys-status" style="margin-left:auto;">points: <span id="track-count">0</span></span>
     </div>
