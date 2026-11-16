@@ -4,7 +4,8 @@ In-browser physics experiments that use your camera. All video is processed loca
 the browser. Vanilla JS, no build step.
 
 - **Exp 01 — Dropping a ball.** Catch a virtual ball with a fist, open your hand to drop
-  it, and work out g from the timed falls (hand tracking with MediaPipe; a "mystery
+  it, and work out g from the falls on a t²-vs-h graph (hand tracking with MediaPipe,
+  mirrored like a mirror; or play with mouse/touch, press-and-hold = fist; a "mystery
   planet" hides g). Real drops can also be auto-tracked or timed with a stopwatch.
 - **Exp 02 — Projectile motion.** Toss a ball across the frame: g, launch speed and
   angle from its arc, and a check that the sideways speed stays constant.
@@ -48,6 +49,7 @@ lab/                the experiment page
   main.js             entry: tabs and boot
   ui.js               shared helpers: status lines, saved settings, the camera
   handtrack.js        loads MediaPipe hand tracking on first use (~18 MB, then cached)
+  sounds.js           small synthesized sound effects (Web Audio)
   modes/              one file per mode: catch, track, measure, simulate (Exp 01),
                         projectile (Exp 02), pendulum (Exp 03); shared by the tracking
                         modes: review.js (replay + frame slider), scale.js (calibration)

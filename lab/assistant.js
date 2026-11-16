@@ -38,6 +38,13 @@ var Assistant = {
     } else {
       lines.push("Auto-track: no successful fit yet.");
     }
+    if (LabLog.catchDrops) {
+      var c = LabLog.catchDrops;
+      lines.push("Catch & drop (virtual ball, gravity " + (c.mystery ? "hidden: mystery planet" : c.trueG + " m/s^2") +
+        "): " + c.n + " drops from heights(m)=" + c.heights.map(function(h) { return h.toFixed(2); }).join(",") +
+        ", mean g=" + c.gMean.toFixed(2) + " ± " + c.gStd.toFixed(2) + ", g from t^2-vs-h slope=" + c.gFit.toFixed(2) +
+        " m/s^2. Falls are timed by screen frames, so times run slightly long and g slightly low.");
+    }
     if (LabLog.projectile) {
       var p = LabLog.projectile;
       lines.push("Projectile (thrown ball) last fit: g=" + p.g.toFixed(2) + " ± " + p.gStdErr.toFixed(2) +
@@ -78,7 +85,7 @@ var Assistant = {
     setStatus($("ask-status"), cls === "err" ? "Assistant error." : "Assistant replied.", cls);
   },
   hasData: function() {
-    return (Measure.trials || []).length > 0 || !!LabLog.lastFit || !!LabLog.projectile ||
+    return (Measure.trials || []).length > 0 || !!LabLog.lastFit || !!LabLog.projectile || !!LabLog.catchDrops ||
       !!LabLog.pendulum || LabLog.failures.length > 0;
   },
   run: function(kind, userText, b64) {

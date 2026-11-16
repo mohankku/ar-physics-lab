@@ -234,7 +234,8 @@
     <h3><i class="fa-solid fa-hand-back-fist"></i> Catch &amp; drop a virtual ball</h3>
     <ol class="phys-steps">
       <li><strong>Open camera</strong> and step back so your hand and the floor-to-ceiling space are in
-        view. The first time, the hand tracker downloads (about 18 MB).</li>
+        view. The first time, the hand tracker downloads (about 18 MB). No camera? Press
+        <strong>Use mouse / touch</strong>: press and hold is a fist.</li>
       <li><strong>Show an open hand ✋</strong>. A green outline means the camera sees it.</li>
       <li><strong>Make a fist ✊ on the ball</strong> to catch it. It moves with your hand.</li>
       <li><strong>Raise it, then open your hand.</strong> The ball falls from that height and the fall is timed.</li>
@@ -245,10 +246,10 @@
       <summary>How it works</summary>
       <p class="desc">A hand-tracking model finds 21 points on your hand in each camera frame, on this
       device. A hand counts as closed when the fingertips come back close to the knuckles. The ball
-      falls from rest with <code>h = ½·g·t²</code>, and each fall is timed by the screen's frames,
-      the way a video would time it. That's why the measured times are a little long, and why slow
-      motion measures more precisely. Set <strong>View height</strong> to how many meters the camera
-      sees from the bottom of the picture to the top, so heights are right.</p>
+      falls from rest with <code>h = ½·g·t²</code>, so <code>t² = (2/g)·h</code>: on the graph, drops
+      from different heights line up on a straight line whose slope gives g. Set
+      <strong>View height</strong> to how many meters the camera sees from the bottom of the picture
+      to the top, so heights are right.</p>
     </details>
     <div class="stage" id="catch-stage">
       <video id="catch-video" autoplay muted playsinline></video>
@@ -257,6 +258,7 @@
     </div>
     <div class="phys-btn-row">
       <button class="pub-btn" id="btn-catch-cam" type="button"><i class="fa-solid fa-video"></i> Open camera</button>
+      <button class="pub-btn" id="btn-catch-pointer" type="button"><i class="fa-solid fa-hand-pointer"></i> Use mouse / touch</button>
       <button class="pub-btn" id="btn-catch-reset" type="button" title="Ball back to the middle (Space)"><i class="fa-solid fa-rotate-left"></i> Ball back</button>
     </div>
     <div class="phys-readouts">
@@ -294,9 +296,12 @@
           <option value="classic">Classic</option>
         </select>
       </label>
+      <label class="phys-field check"><input id="catch-mirror" type="checkbox" checked> Mirror (like a mirror)</label>
+      <label class="phys-field check"><input id="catch-sound" type="checkbox" checked> Sound</label>
       <span id="catch-mystery" hidden><button class="pub-btn" id="catch-reveal" type="button">Reveal</button></span>
     </div>
     <p id="catch-stats" style="font-size:13px;">No drops yet.</p>
+    <canvas class="phys-plot" id="catch-plot" aria-label="Graph of t squared against drop height"></canvas>
     <table class="phys-table" aria-label="Drops">
       <thead><tr><th>#</th><th>h (m)</th><th>t (s)</th><th>t² (s²)</th><th>g = 2h/t²</th></tr></thead>
       <tbody id="catch-rows"></tbody>
