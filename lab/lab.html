@@ -1,4 +1,4 @@
-<!-- AR Physics Lab markup. Injected by ../loader.js (index.html here, and mohankku.github.io/physics). Logic: main.js, modes/ and ../core/. Exp 01 = tabs (simulate/measure/track/hold); Exp 02 = mode-proj; Exp 03 = mode-pend. -->
+<!-- AR Physics Lab markup. Injected by ../loader.js (index.html here, and mohankku.github.io/physics). Logic: main.js, modes/ and ../core/. Exp 01 = tabs (catch/track/measure/simulate); Exp 02 = mode-proj; Exp 03 = mode-pend. -->
 <div class="phys-lab" id="phys-lab">
 
   <div class="phys-hero">
@@ -21,7 +21,7 @@
     <button type="button" class="phys-exp-card" data-exp="exp-01" aria-controls="exp-01">
       <span class="phys-badge live">● Live</span>
       <h3>Exp 01 — Dropping a Ball</h3>
-      <p>Drop a real ball in front of the camera and measure Earth's gravity from its fall.</p>
+      <p>Catch a virtual ball with your hand, open your hand to drop it, and work out gravity from the falls.</p>
       <span class="phys-exp-go">Start here</span>
     </button>
     <button type="button" class="phys-exp-card" data-exp="exp-02" aria-controls="exp-02">
@@ -47,10 +47,10 @@
   <h2>Exp 01 — Dropping a Ball: measure gravity</h2>
 
   <div class="phys-mode-tabs" role="tablist" aria-label="Experiment modes">
-    <button class="phys-mode-btn active" data-mode="mode-track" aria-selected="true">Measure g (auto-track)</button>
+    <button class="phys-mode-btn active" data-mode="mode-catch" aria-selected="true">Catch &amp; drop</button>
+    <button class="phys-mode-btn" data-mode="mode-track" aria-selected="false">Real ball (auto-track)</button>
     <button class="phys-mode-btn" data-mode="mode-measure" aria-selected="false">Stopwatch</button>
     <button class="phys-mode-btn" data-mode="mode-simulate" aria-selected="false">AR simulation</button>
-    <button class="phys-mode-btn" data-mode="mode-hold" aria-selected="false">Virtual ball in your hand</button>
   </div>
 
   <!-- MODE 1 -->
@@ -143,7 +143,7 @@
   </div>
 
   <!-- MODE 3 -->
-  <div class="phys-mode" id="mode-track">
+  <div class="phys-mode" id="mode-track" hidden>
     <h3><i class="fa-solid fa-crosshairs"></i> Measure g from a real drop</h3>
     <ol class="phys-steps">
       <li><strong>Set up.</strong> Stand the camera on a shelf or table, about 2 m from a plain wall, so
@@ -229,90 +229,80 @@
     <canvas id="track-plot" style="width:100%; height:160px; border:1px solid var(--border-color,#e2e8f0); border-radius:8px;"></canvas>
   </div>
 
-  <!-- MODE 4 -->
-  <div class="phys-mode" id="mode-hold" hidden>
-    <h3><i class="fa-solid fa-hand"></i> Hold the ball in your hand</h3>
-    <p class="desc">The virtual ball sticks to your hand as you move it. Easiest: pick
-    <strong>Skin</strong> and wave — no clicking needed. Lift the ball above the dashed
-    <strong>drop line</strong> to release it from that height. Keep your hand below the line
-    to keep holding. Hanging a blue sheet behind you? Tick <strong>Blue backdrop</strong> and
-    the tracker will ignore it. If the ball sticks to the wrong thing, tick <strong>Tracker
-    view</strong> to see the match dots — green where the tracker looks. Keep faces and bare
-    arms out of frame: the lock prefers your hand but a face is a bigger target. Release
-    (or Space) also works from anywhere.</p>
+  <!-- Catch & drop: virtual ball, hand gestures (lab/modes/catch.js) -->
+  <div class="phys-mode" id="mode-catch">
+    <h3><i class="fa-solid fa-hand-back-fist"></i> Catch &amp; drop a virtual ball</h3>
+    <ol class="phys-steps">
+      <li><strong>Open camera</strong> and step back so your hand and the floor-to-ceiling space are in
+        view. The first time, the hand tracker downloads (about 18 MB).</li>
+      <li><strong>Show an open hand ✋</strong>. A green outline means the camera sees it.</li>
+      <li><strong>Make a fist ✊ on the ball</strong> to catch it. It moves with your hand.</li>
+      <li><strong>Raise it, then open your hand.</strong> The ball falls from that height and the fall is timed.</li>
+      <li><strong>Catch it again</strong> with a fist where it's falling (slow motion helps!), or pick it up
+        from the floor. Drop from different heights and watch the table work out g.</li>
+    </ol>
+    <details class="phys-more">
+      <summary>How it works</summary>
+      <p class="desc">A hand-tracking model finds 21 points on your hand in each camera frame, on this
+      device. A hand counts as closed when the fingertips come back close to the knuckles. The ball
+      falls from rest with <code>h = ½·g·t²</code>, and each fall is timed by the screen's frames,
+      the way a video would time it. That's why the measured times are a little long, and why slow
+      motion measures more precisely. Set <strong>View height</strong> to how many meters the camera
+      sees from the bottom of the picture to the top, so heights are right.</p>
+    </details>
+    <div class="stage" id="catch-stage">
+      <video id="catch-video" autoplay muted playsinline></video>
+      <canvas class="overlay" id="catch-overlay"></canvas>
+      <div class="stage-empty"><span><i class="fa-solid fa-video"></i> Camera off.</span><span>Press Open camera, then show your hand.</span></div>
+    </div>
+    <div class="phys-btn-row">
+      <button class="pub-btn" id="btn-catch-cam" type="button"><i class="fa-solid fa-video"></i> Open camera</button>
+      <button class="pub-btn" id="btn-catch-reset" type="button" title="Ball back to the middle (Space)"><i class="fa-solid fa-rotate-left"></i> Ball back</button>
+    </div>
+    <div class="phys-readouts">
+      <div class="phys-read">hand<strong id="ro-c-hand">—</strong></div>
+      <div class="phys-read">ball height<strong id="ro-c-h">—</strong></div>
+      <div class="phys-read">fall time<strong id="ro-c-t">—</strong></div>
+      <div class="phys-read">theory t = √(2h/g)<strong id="ro-c-theory">—</strong></div>
+    </div>
+    <p class="phys-status" id="catch-status">Press Open camera to begin.</p>
     <div class="phys-controls">
-      <div class="phys-field">Hand color
-        <div class="swatch-row">
-          <button class="swatch selected" data-color="skin" style="background:linear-gradient(135deg,#f1c27d,#e0ac69)" aria-label="Skin"></button>
-          <button class="swatch" data-color="red" style="background:#e5484d" aria-label="Red"></button>
-          <button class="swatch" data-color="green" style="background:#2ea043" aria-label="Green"></button>
-          <button class="swatch" data-color="blue" style="background:#1f6feb" aria-label="Blue"></button>
-          <button class="swatch" data-color="orange" style="background:#eb821e" aria-label="Orange"></button>
-        </div>
-      </div>
-      <label class="phys-field" style="flex-direction:row; align-items:center; gap:6px;">
-        <input id="hold-motion" type="checkbox" checked> Moving only
-      </label>
-      <label class="phys-field" style="flex-direction:row; align-items:center; gap:6px;">
-        <input id="hold-line" type="checkbox" checked> Drop line
-      </label>
-      <label class="phys-field">Line at
-        <input id="hold-linepos" type="range" min="5" max="50" value="20" step="1">
-      </label>
-      <label class="phys-field" style="flex-direction:row; align-items:center; gap:6px;">
-        <input id="hold-blue" type="checkbox"> Blue backdrop
-      </label>
-      <label class="phys-field" style="flex-direction:row; align-items:center; gap:6px;">
-        <input id="hold-mask" type="checkbox"> Tracker view
-      </label>
-      <label class="phys-field">Tolerance
-        <input id="hold-tol" type="range" min="30" max="150" value="80" step="5" disabled>
-      </label>
-      <label class="phys-field">Ceiling height h (m)
-        <input id="hold-height" type="number" value="2" min="0.2" max="50" step="0.1">
-      </label>
       <label class="phys-field">Gravity
-        <select id="hold-gravity">
-          <option value="3.70">Mercury · 3.70</option>
-          <option value="8.87">Venus · 8.87</option>
+        <select id="catch-gravity">
           <option value="9.81" selected>Earth · 9.81</option>
           <option value="1.62">Moon · 1.62</option>
           <option value="3.71">Mars · 3.71</option>
           <option value="24.79">Jupiter · 24.79</option>
-          <option value="10.44">Saturn · 10.44</option>
-          <option value="8.69">Uranus · 8.69</option>
-          <option value="11.15">Neptune · 11.15</option>
-          <option value="custom">Custom…</option>
+          <option value="mystery">Mystery planet ?</option>
         </select>
       </label>
-      <label class="phys-field">Custom g (m/s²)
-        <input id="hold-g-custom" type="number" value="9.81" min="0.1" max="100" step="0.01" disabled>
+      <label class="phys-field">Slow motion
+        <select id="catch-slow">
+          <option value="1" selected>1× real time</option>
+          <option value="0.5">0.5×</option>
+          <option value="0.25">0.25×</option>
+        </select>
+      </label>
+      <label class="phys-field">View height (m)
+        <input id="catch-view" type="number" value="2" min="0.3" max="20" step="0.1">
       </label>
       <label class="phys-field">Ball
-        <select id="hold-ball">
+        <select id="catch-ball">
           <option value="tennis" selected>Tennis</option>
           <option value="basketball">Basketball</option>
           <option value="bowling">Bowling</option>
           <option value="classic">Classic</option>
         </select>
       </label>
+      <span id="catch-mystery" hidden><button class="pub-btn" id="catch-reveal" type="button">Reveal</button></span>
     </div>
+    <p id="catch-stats" style="font-size:13px;">No drops yet.</p>
+    <table class="phys-table" aria-label="Drops">
+      <thead><tr><th>#</th><th>h (m)</th><th>t (s)</th><th>t² (s²)</th><th>g = 2h/t²</th></tr></thead>
+      <tbody id="catch-rows"></tbody>
+    </table>
     <div class="phys-btn-row">
-      <button class="pub-btn" id="btn-hold-cam" type="button"><i class="fa-solid fa-video"></i> Open camera</button>
-      <button class="pub-btn" id="btn-hold-drop" type="button"><i class="fa-solid fa-play"></i> Release</button>
-      <button class="pub-btn" id="btn-hold-reset" type="button"><i class="fa-solid fa-rotate-left"></i> Hold again</button>
-    </div>
-    <div class="phys-readouts">
-      <div class="phys-read">hand height<strong id="ro-h-y">—</strong></div>
-      <div class="phys-read">hand speed<strong id="ro-h-v">—</strong></div>
-      <div class="phys-read">fall time<strong id="ro-h-t">0.000 s</strong></div>
-      <div class="phys-read">theory t<strong id="ro-h-theory">—</strong></div>
-    </div>
-    <p class="phys-status" id="hold-status">Open the camera to begin.</p>
-    <div class="stage" id="hold-stage">
-      <video id="hold-video" autoplay muted playsinline></video>
-      <canvas class="overlay" id="hold-overlay"></canvas>
-      <div class="stage-empty"><span><i class="fa-solid fa-video"></i> Camera off.</span><span>Open the camera, then click your hand in the video to sample its color.</span></div>
+      <button class="pub-btn" id="btn-catch-clear" type="button"><i class="fa-solid fa-trash"></i> Clear drops</button>
     </div>
   </div>
 

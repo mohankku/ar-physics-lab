@@ -7,7 +7,7 @@ import { $, camera, setActivePane, remember, recall } from "./ui.js";
 import { Sim } from "./modes/simulate.js";
 import { Measure } from "./modes/measure.js";
 import { Track } from "./modes/track.js";
-import { Hold } from "./modes/hold.js";
+import { Catch } from "./modes/catch.js";
 import { Projectile } from "./modes/projectile.js";
 import { Pendulum } from "./modes/pendulum.js";
 import { Assistant } from "./assistant.js";
@@ -81,7 +81,7 @@ function boot() {
   Sim.init();
   Measure.init();
   Track.init();
-  Hold.init();
+  Catch.init();
   Projectile.init();
   Pendulum.init();
   Assistant.init();

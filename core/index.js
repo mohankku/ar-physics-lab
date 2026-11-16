@@ -20,6 +20,7 @@ export { analyzeFall, cleanSamples, frameRate } from "./analysis.js";
 export { analyzeProjectile, projectilePath } from "./projectile.js";
 export { analyzePendulum, pendulumModel, periodFactor } from "./pendulum.js";
 export { simulateFall, AIR_DENSITY, DRAG_COEFFICIENTS } from "./models.js";
+export { handOpenness, palmCenter, GestureGate, CatchBall } from "./gesture.js";
 export {
   resolveScale, scaleFromBallWidths, scaleFromPoints, clientToCamera, BALL_DIAMETERS
 } from "./calibration.js";

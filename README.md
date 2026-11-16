@@ -3,8 +3,9 @@
 In-browser physics experiments that use your camera. All video is processed locally in
 the browser. Vanilla JS, no build step.
 
-- **Exp 01 — Dropping a ball.** A virtual ball falls over the live camera feed; real
-  drops are timed with a stopwatch or auto-tracked to fit g.
+- **Exp 01 — Dropping a ball.** Catch a virtual ball with a fist, open your hand to drop
+  it, and work out g from the timed falls (hand tracking with MediaPipe; a "mystery
+  planet" hides g). Real drops can also be auto-tracked or timed with a stopwatch.
 - **Exp 02 — Projectile motion.** Toss a ball across the frame: g, launch speed and
   angle from its arc, and a check that the sideways speed stays constant.
 - **Exp 03 — Pendulum period.** Time a ball swinging on a string: period, damping, and
@@ -37,7 +38,8 @@ core/               AR engine (ES modules, no dependencies)
   replay.js           draw a measured fall or throw back over the video, beside a 9.81 ghost
   framebuffer.js      FrameRing: recent frames kept for stepping through a fall
   physics.js          kinematics, least-squares (quadratic, line) and outlier-robust fits
-  sim.js              FreeFall (Simulate) and HandBall (Hand-hold), exact closed-form motion
+  sim.js              FreeFall (Simulate) and HandBall, exact closed-form motion
+  gesture.js          hand openness from landmarks, grab/release gestures, CatchBall
   models.js           engineering models for the workbench: simulateFall (quadratic air drag)
   render.js           canvas drawing: realistic balls, overlays, result plots
 lab/                the experiment page
@@ -45,7 +47,8 @@ lab/                the experiment page
   lab.css             styles
   main.js             entry: tabs and boot
   ui.js               shared helpers: status lines, saved settings, the camera
-  modes/              one file per mode: simulate, measure, track, hold (Exp 01),
+  handtrack.js        loads MediaPipe hand tracking on first use (~18 MB, then cached)
+  modes/              one file per mode: catch, track, measure, simulate (Exp 01),
                         projectile (Exp 02), pendulum (Exp 03); shared by the tracking
                         modes: review.js (replay + frame slider), scale.js (calibration)
   assistant.js        local-LLM lab assistant (+ ollama.js, lablog.js)

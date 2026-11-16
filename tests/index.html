@@ -16,7 +16,7 @@
   <ul id="results"></ul>
   <script type="module">
     import { runAll } from "./harness.js";
-    const files = ["physics", "analysis", "projectile", "pendulum", "models", "bench-scene", "vision", "camera", "sim", "trigger", "replay", "framebuffer", "calibration"];
+    const files = ["physics", "analysis", "projectile", "pendulum", "models", "gesture", "bench-scene", "vision", "camera", "sim", "trigger", "replay", "framebuffer", "calibration"];
     const summary = document.getElementById("summary");
     try {
       for (const f of files) await import(`./${f}.test.js`);
