@@ -1,5 +1,5 @@
 import { test, assert, near, rng, gaussian } from "./harness.js";
-import { FallTrigger } from "../core/trigger.js";
+import { FallTrigger, ThrowTrigger } from "../core/trigger.js";
 
 const FPS = 30, G_FRAC = 9.81 / 2; // g in frame heights/s² when the frame is 2 m tall
 
@@ -89,4 +89,69 @@ test("reset clears everything", () => {
   feed(trig);
   trig.reset();
   assert(trig.state === "waiting" && trig.samples().length === 0 && trig.restY === null, "fresh");
+});
+
+/* ThrowTrigger: ball held at (0.2, 0.7), optional wind-up dip, thrown at
+ * (vx, vy) frame fractions/s (vy < 0 = up) under g = 9.81 in a 1.5 m frame;
+ * `floor` makes it bounce; `catchAt` freezes it mid-air. */
+function throwFeed(trig, { throwAt = 1, until = 4, vx = 0.5, vy = -1.6, dip = 0, floor = 2,
+  catchAt = Infinity, jitter = 0, seed = 2 } = {}) {
+  const rand = rng(seed), events = [], gF = 9.81 / 1.5;
+  let held = null;
+  for (let i = 0; i * (1 / FPS) <= until; i++) {
+    const t = i / FPS;
+    let x = 0.2, y = 0.7;
+    if (t >= throwAt - 0.2 && t < throwAt) { // wind-up: dip and come back
+      y += dip * Math.sin(Math.PI * (t - throwAt + 0.2) / 0.2);
+    } else if (t >= throwAt) {
+      const s = t - throwAt;
+      x += vx * s; y += vy * s + 0.5 * gF * s * s;
+      if (y > floor) y = floor - (y - floor); // crude bounce
+      if (t >= catchAt) { held = held || { x, y }; x = held.x; y = held.y; }
+    }
+    const ev = trig.push(t, { x: x + gaussian(rand, jitter), y: y + gaussian(rand, jitter) });
+    if (ev) events.push({ t, ...ev });
+  }
+  return events;
+}
+
+test("throw: starts on a throw in any direction, stops at the frame edge", () => {
+  const trig = new ThrowTrigger();
+  const ev = throwFeed(trig, { jitter: 0.002 });
+  const start = ev.find((e) => e.type === "started");
+  assert(start && start.t >= 1 && start.t < 1.15, "started t=" + (start && start.t));
+  const stop = ev.find((e) => e.type === "stopped");
+  assert(stop && stop.reason === "left-frame", "stop: " + (stop && stop.reason));
+  near(trig.restPoint.x, 0.2, 0.005, "rest x");
+  near(trig.restPoint.y, 0.7, 0.005, "rest y");
+});
+
+test("throw: a sideways throw starts it too (a drop trigger would not)", () => {
+  const trig = new ThrowTrigger();
+  const ev = throwFeed(trig, { vx: 1.2, vy: -0.4 });
+  assert(ev.some((e) => e.type === "started"), "started");
+});
+
+test("throw: a wind-up dip is not a bounce, a real bounce is", () => {
+  const dip = new ThrowTrigger();
+  const ev = throwFeed(dip, { dip: 0.08 });
+  const stop = ev.find((e) => e.type === "stopped");
+  assert(stop && stop.reason !== "bounced", "dip: " + (stop && stop.reason));
+  const bounce = new ThrowTrigger();
+  const ev2 = throwFeed(bounce, { vx: 0.2, floor: 0.9 });
+  const stop2 = ev2.find((e) => e.type === "stopped");
+  assert(stop2 && stop2.reason === "bounced", "bounce: " + (stop2 && stop2.reason));
+});
+
+test("throw: stops when the ball is caught", () => {
+  const trig = new ThrowTrigger();
+  const ev = throwFeed(trig, { vx: 0.2, catchAt: 1.4 });
+  const stop = ev.find((e) => e.type === "stopped");
+  assert(stop && stop.reason === "caught" && stop.t < 1.9, "caught: " + JSON.stringify(stop));
+});
+
+test("throw: jitter alone never starts it", () => {
+  const trig = new ThrowTrigger();
+  const ev = throwFeed(trig, { throwAt: 99, jitter: 0.004 });
+  assert(!ev.some((e) => e.type === "started") && trig.state === "ready", "no false start");
 });

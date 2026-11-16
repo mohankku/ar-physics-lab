@@ -1,17 +1,23 @@
-/* Auto-track review: after a fit, replay the fall in slow motion over the
- * video, and let the user step through the recorded frames with a slider.
- * Track (track.js) feeds it frames while recording and hands it the fit. */
+/* Review after a fit: replay the motion in slow motion over the video, and
+ * let the user step through the recorded frames with a slider. The mode
+ * feeds it frames while recording and hands it the fit.
+ *
+ * makeReview("track", kind) wires track-review, track-scrub, track-scrub-t,
+ * btn-track-play, track-overlay and track-ghost. kind says how to draw:
+ *   {path(res) → replay path, draw(ctx, dims, path, tau, opts), g(res)} */
 import * as AR from "../../core/index.js";
 import { $ } from "../ui.js";
 
 var R = AR.render;
-var PRE_ROLL_S = 0.6; // frames kept from before the drop while armed
+var PRE_ROLL_S = 0.6; // frames kept from before the motion while armed
 
-var TrackReview = {
+function makeReview(p, kind) {
+var id = function(name) { return p + "-" + name; };
+return {
   frames: new AR.FrameRing(),
   loop: null,     // ReplayLoop while playing
-  path: null,     // fallPath of the last fit
-  res: null,      // last analyzeFall result
+  path: null,     // replay path of the last fit
+  res: null,      // last analysis result
 
   /* Store a camera frame. Before the drop only a short pre-roll is kept. */
   capture: function(video, t, recording) {
@@ -25,16 +31,16 @@ var TrackReview = {
     var self = this;
     this.stop();
     this.res = res;
-    this.path = AR.fallPath(res);
+    this.path = kind.path(res);
     this.loop = new AR.ReplayLoop(res.span, function(tau) { self.draw(tau, null); });
     this.loop.start();
     this.frames.settle().then(function() {
       if (self.res !== res) return; // superseded
       var n = self.frames.frames.length;
-      $("track-review").hidden = n < 2;
-      $("track-scrub").max = String(Math.max(0, n - 1));
-      $("track-scrub").value = "0";
-      $("track-scrub-t").textContent = "slow-motion replay";
+      $(id("review")).hidden = n < 2;
+      $(id("scrub")).max = String(Math.max(0, n - 1));
+      $(id("scrub")).value = "0";
+      $(id("scrub-t")).textContent = "slow-motion replay";
     });
   },
 
@@ -46,20 +52,20 @@ var TrackReview = {
     var tau = f.time - this.res.origin.t;
     this.draw(tau, f.image);
     var ms = Math.round(tau * 1000);
-    $("track-scrub-t").textContent = "frame " + (i + 1) + "/" + this.frames.frames.length +
+    $(id("scrub-t")).textContent = "frame " + (i + 1) + "/" + this.frames.frames.length +
       " · t = " + (ms >= 0 ? "+" : "−") + Math.abs(ms) + " ms";
   },
 
   play: function() {
     if (!this.loop) return;
     this.loop.start();
-    $("track-scrub-t").textContent = "slow-motion replay";
+    $(id("scrub-t")).textContent = "slow-motion replay";
   },
 
   draw: function(tau, background) {
-    var cv = $("track-overlay");
-    AR.drawReplay(cv.getContext("2d"), R.fitCanvas(cv), this.path, tau, {
-      ghost: $("track-ghost").checked, measuredG: this.res.fit.g, background: background
+    var cv = $(id("overlay"));
+    kind.draw(cv.getContext("2d"), R.fitCanvas(cv), this.path, tau, {
+      ghost: $(id("ghost")).checked, measuredG: kind.g(this.res), background: background
     });
   },
 
@@ -67,7 +73,7 @@ var TrackReview = {
   stop: function() {
     if (this.loop) this.loop.stop();
     this.loop = null;
-    var cv = $("track-overlay");
+    var cv = $(id("overlay"));
     cv.getContext("2d").clearRect(0, 0, cv.width, cv.height);
   },
 
@@ -77,16 +83,17 @@ var TrackReview = {
     this.frames.clear();
     this.path = null;
     this.res = null;
-    $("track-review").hidden = true;
+    $(id("review")).hidden = true;
   },
 
   init: function() {
     var self = this;
-    $("track-scrub").addEventListener("input", function() {
-      self.scrub(parseInt($("track-scrub").value, 10) || 0);
+    $(id("scrub")).addEventListener("input", function() {
+      self.scrub(parseInt($(id("scrub")).value, 10) || 0);
     });
-    $("btn-track-play").addEventListener("click", function() { self.play(); });
+    $("btn-" + p + "-play").addEventListener("click", function() { self.play(); });
   }
 };
+}
 
-export { TrackReview };
+export { makeReview };

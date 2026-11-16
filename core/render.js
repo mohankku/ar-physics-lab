@@ -217,3 +217,139 @@ export function drawFitPlot(ctx, dims, points, fit) {
     ctx.beginPath(); ctx.arc(X(s.t), Y(s.y), 2.2 * dims.dpr, 0, 2 * Math.PI); ctx.fill();
   });
 }
+
+/* Arrow from (x, y) to (x + dx, y + dy), canvas px. */
+export function drawArrow(ctx, dims, x, y, dx, dy, color) {
+  var len = Math.hypot(dx, dy);
+  if (len < 2 * dims.dpr) return;
+  var head = Math.min(8 * dims.dpr, len * 0.4), a = Math.atan2(dy, dx);
+  ctx.strokeStyle = color; ctx.fillStyle = color;
+  ctx.lineWidth = 2.5 * dims.dpr;
+  ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + dx - head * 0.6 * Math.cos(a), y + dy - head * 0.6 * Math.sin(a)); ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(x + dx, y + dy);
+  ctx.lineTo(x + dx - head * Math.cos(a - 0.45), y + dy - head * Math.sin(a - 0.45));
+  ctx.lineTo(x + dx - head * Math.cos(a + 0.45), y + dy - head * Math.sin(a + 0.45));
+  ctx.closePath(); ctx.fill();
+}
+
+/* Axes for a small chart in box {x, y, w, h} (canvas px) over the data
+ * ranges given; returns value → px mappers. A zero line is drawn when 0 is
+ * inside the y range. ink: axis/label color as "r,g,b" (default black;
+ * pass a light one on dark backgrounds). */
+export function chartFrame(ctx, dims, box, xr, yr, labels, ink) {
+  var c = ink || "0,0,0";
+  var d = dims.dpr, L = box.x + 30 * d, R = box.x + box.w - 6 * d;
+  var T = box.y + 14 * d, B = box.y + box.h - 14 * d;
+  var xs = xr[1] - xr[0] || 1, ys = yr[1] - yr[0] || 1;
+  function X(v) { return L + (v - xr[0]) / xs * (R - L); }
+  function Y(v) { return B - (v - yr[0]) / ys * (B - T); }
+  ctx.strokeStyle = "rgba(" + c + ",0.25)";
+  ctx.lineWidth = d;
+  ctx.beginPath(); ctx.moveTo(L, T); ctx.lineTo(L, B); ctx.lineTo(R, B); ctx.stroke();
+  if (yr[0] < 0 && yr[1] > 0) {
+    ctx.setLineDash([3 * d, 3 * d]);
+    ctx.beginPath(); ctx.moveTo(L, Y(0)); ctx.lineTo(R, Y(0)); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  ctx.fillStyle = "rgba(" + c + ",0.6)";
+  ctx.font = (10 * d) + "px system-ui, sans-serif";
+  ctx.textAlign = "right";
+  ctx.fillText(labels[0], R, box.y + box.h - 2 * d);
+  ctx.textAlign = "left";
+  ctx.fillText(labels[1], box.x + 4 * d, box.y + 10 * d);
+  ctx.fillText(fmtTick(yr[1]), box.x + 2 * d, T + 10 * d);
+  ctx.fillText(fmtTick(yr[0]), box.x + 2 * d, B);
+  return { X: X, Y: Y };
+}
+function fmtTick(v) { return Math.abs(v) >= 10 ? v.toFixed(0) : v.toFixed(1); }
+
+function range(vals, pad) {
+  var lo = Infinity, hi = -Infinity;
+  vals.forEach(function(v) { if (isFinite(v)) { lo = Math.min(lo, v); hi = Math.max(hi, v); } });
+  if (!isFinite(lo)) return [0, 1];
+  var p = (hi - lo) * (pad || 0.08) || 0.5;
+  return [lo - p, hi + p];
+}
+function dots(ctx, dims, pts, color) {
+  ctx.fillStyle = color;
+  pts.forEach(function(p) {
+    ctx.beginPath(); ctx.arc(p[0], p[1], 2.2 * dims.dpr, 0, 2 * Math.PI); ctx.fill();
+  });
+}
+function curve(ctx, dims, n, at, color, dash) {
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2 * dims.dpr;
+  if (dash) ctx.setLineDash([5 * dims.dpr, 4 * dims.dpr]);
+  ctx.beginPath();
+  for (var i = 0; i <= n; i++) {
+    var p = at(i / n);
+    if (i === 0) ctx.moveTo(p[0], p[1]); else ctx.lineTo(p[0], p[1]);
+  }
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+/* Projectile results: the arc (height vs distance) and the two velocity
+ * components vs time — vx stays flat, vy falls at slope −g.
+ * res: a successful analyzeProjectile() result. */
+export function drawProjectilePlot(ctx, dims, res) {
+  ctx.clearRect(0, 0, dims.w, dims.h);
+  var half = Math.floor(dims.w / 2), dir = res.vx < 0 ? -1 : 1, o = res.origin;
+  var pts = res.points;
+  // Left: height above launch vs horizontal distance.
+  var dist = function(p) { return (p.x - o.x) * dir; };
+  var rise = function(p) { return o.y - p.y; };
+  var xr = range(pts.map(dist)), yr = range(pts.map(rise));
+  var A = chartFrame(ctx, dims, { x: 0, y: 0, w: half - 8 * dims.dpr, h: dims.h }, xr, yr,
+    ["distance (m)", "height (m)"]);
+  curve(ctx, dims, 48, function(f) {
+    var t = res.span * f;
+    return [A.X(Math.abs(res.vx) * t), A.Y(res.vy * t - 0.5 * res.g * t * t)];
+  }, "#1a56db");
+  dots(ctx, dims, pts.map(function(p) { return [A.X(dist(p)), A.Y(rise(p))]; }), "#e5484d");
+  // Right: velocity components from neighboring frames, with the fitted lines.
+  var vxs = [], vys = [];
+  for (var i = 1; i < pts.length - 1; i++) {
+    var dt = pts[i + 1].t - pts[i - 1].t;
+    if (!(dt > 0)) continue;
+    vxs.push([pts[i].t, (pts[i + 1].x - pts[i - 1].x) / dt * dir]);
+    vys.push([pts[i].t, -(pts[i + 1].y - pts[i - 1].y) / dt]);
+  }
+  var vr = range(vxs.concat(vys).map(function(p) { return p[1]; })
+    .concat([res.vy, res.vy - res.g * res.span, Math.abs(res.vx), 0]));
+  var B = chartFrame(ctx, dims, { x: half, y: 0, w: dims.w - half, h: dims.h }, [0, res.span], vr,
+    ["t (s)", "velocity (m/s)"]);
+  curve(ctx, dims, 2, function(f) { return [B.X(res.span * f), B.Y(Math.abs(res.vx))]; }, "#0e9f8f");
+  curve(ctx, dims, 2, function(f) {
+    var t = res.span * f; return [B.X(t), B.Y(res.vy - res.g * t)];
+  }, "#d97706");
+  dots(ctx, dims, vxs.map(function(p) { return [B.X(p[0]), B.Y(p[1])]; }), "#0e9f8f");
+  dots(ctx, dims, vys.map(function(p) { return [B.X(p[0]), B.Y(p[1])]; }), "#d97706");
+  ctx.font = "600 " + (10 * dims.dpr) + "px system-ui, sans-serif";
+  ctx.fillStyle = "#0e9f8f"; ctx.fillText("vx", B.X(res.span) - 14 * dims.dpr, B.Y(Math.abs(res.vx)) - 4 * dims.dpr);
+  ctx.fillStyle = "#d97706"; ctx.fillText("vy", B.X(0) + 4 * dims.dpr, B.Y(res.vy) - 4 * dims.dpr);
+}
+
+/* Pendulum results: displacement vs time with the fitted damped swing and
+ * a tick at each center crossing used. unit: frame heights → display unit
+ * ({k, label}), e.g. {k: 150, label: "cm"} when the frame is 1.5 m tall.
+ * res: a successful analyzePendulum() result. model(t): fitted displacement. */
+export function drawPendulumPlot(ctx, dims, res, model, unit) {
+  ctx.clearRect(0, 0, dims.w, dims.h);
+  var k = unit.k, ser = res.series, tEnd = ser[ser.length - 1].t;
+  var yr = range(ser.map(function(p) { return p.s * k; }), 0.1);
+  var A = chartFrame(ctx, dims, { x: 0, y: 0, w: dims.w, h: dims.h }, [0, tEnd], yr,
+    ["t (s)", "displacement (" + unit.label + ")"]);
+  var t1 = res.crossings[0].t, t2 = res.crossings[res.crossings.length - 1].t;
+  curve(ctx, dims, Math.max(60, Math.round((t2 - t1) * 40)), function(f) {
+    var t = t1 + (t2 - t1) * f; return [A.X(t), A.Y(model(t) * k)];
+  }, "#1a56db");
+  dots(ctx, dims, ser.map(function(p) { return [A.X(p.t), A.Y(p.s * k)]; }), "rgba(229,72,77,0.8)");
+  ctx.strokeStyle = "rgba(15,32,39,0.55)";
+  ctx.lineWidth = dims.dpr;
+  res.crossings.forEach(function(c) {
+    var x = A.X(c.t);
+    ctx.beginPath(); ctx.moveTo(x, A.Y(0) - 5 * dims.dpr); ctx.lineTo(x, A.Y(0) + 5 * dims.dpr); ctx.stroke();
+  });
+}

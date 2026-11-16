@@ -20,10 +20,26 @@ function readGravity(selectId, customId) {
   var g = preset.value === "custom" ? parseFloat($(customId).value) || 9.81 : parseFloat(preset.value);
   return g > 0 ? g : 9.81;
 }
-/* Space bar runs fn while pane is visible and focus isn't on a control. */
+/* The experiment pane the user last touched; Space belongs to it. Panes
+ * marked data-space-explicit only get Space once touched (several
+ * experiments are visible at once, and one key press must not drive all). */
+var activePane = null;
+function setActivePane(id) { activePane = id; }
+["pointerdown", "focusin"].forEach(function(type) {
+  document.addEventListener(type, function(e) {
+    var pane = e.target && e.target.closest && e.target.closest(".phys-mode");
+    if (pane && pane.id) activePane = pane.id;
+  }, true);
+});
+function ownsSpace(pane) {
+  var act = activePane && $(activePane);
+  if (act && !act.hidden) return act === pane;
+  return !pane.hasAttribute("data-space-explicit");
+}
+/* Space bar runs fn while pane is visible, owns Space, and focus isn't on a control. */
 function onSpace(paneId, fn) {
   document.addEventListener("keydown", function(e) {
-    if (e.code !== "Space" || $(paneId).hidden) return;
+    if (e.code !== "Space" || $(paneId).hidden || !ownsSpace($(paneId))) return;
     var tag = (document.activeElement && document.activeElement.tagName) || "";
     if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA" || tag === "BUTTON") return;
     e.preventDefault();
@@ -84,6 +100,6 @@ camera.onChange(function(live) {
 });
 
 export {
-  $, setStatus, numberIn, readGravity, onSpace, selectSwatch,
+  $, setStatus, numberIn, readGravity, onSpace, setActivePane, selectSwatch,
   remember, recall, restoreSettings, saveSettings, ballStyle, camera, openCamera
 };

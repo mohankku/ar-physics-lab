@@ -42,16 +42,7 @@ export function analyzeFall(samples, scale) {
   }
   const fail = (error, detail) => ({ ok: false, error, detail });
 
-  // One point per camera frame, in time order, finite values only.
-  const sorted = samples
-    .filter((s) => s && isFinite(s.t) && isFinite(s.y))
-    .slice()
-    .sort((a, b) => a.t - b.t);
-  const uniq = [];
-  for (const s of sorted) {
-    if (!uniq.length || s.t > uniq[uniq.length - 1].t + 1e-6) uniq.push(s);
-  }
-  const duplicates = sorted.length - uniq.length;
+  const { points: uniq, duplicates } = cleanSamples(samples, ["t", "y"]);
 
   // Keep the falling segment: never far above the last kept point.
   const pts = [];
@@ -92,11 +83,38 @@ export function analyzeFall(samples, scale) {
     return fail("Fit failed — noisier data than expected. Retry with steadier light.",
       `least-squares fit failed on ${mks.length} points`);
   }
-  const fps = (uniq.length - 1) / (uniq[uniq.length - 1].t - uniq[0].t);
+  const fps = frameRate(uniq);
   const xs = pts.filter((s) => isFinite(s.x)).map((s) => s.x);
   return {
     ok: true, fit: robust.fit, points: robust.kept, span: fallSpan,
-    fps: isFinite(fps) ? fps : 0, rejected: robust.rejected, duplicates,
+    fps, rejected: robust.rejected, duplicates,
     origin, frameHeightM, x: xs.length ? median(xs) : null
   };
+}
+
+/**
+ * One point per camera frame, in time order, with finite values for `keys`.
+ * Repeated timestamps (a page loop faster than the camera) are dropped.
+ * @template {{t: number}} T
+ * @param {T[]} samples
+ * @param {string[]} [keys]  fields that must be finite numbers
+ * @returns {{points: T[], duplicates: number}}
+ */
+export function cleanSamples(samples, keys = ["t", "y"]) {
+  const sorted = samples
+    .filter((s) => s && keys.every((k) => isFinite(s[k])))
+    .slice()
+    .sort((a, b) => a.t - b.t);
+  const points = [];
+  for (const s of sorted) {
+    if (!points.length || s.t > points[points.length - 1].t + 1e-6) points.push(s);
+  }
+  return { points, duplicates: sorted.length - points.length };
+}
+
+/** Mean frame rate of time-ordered points (0 if unknown). */
+export function frameRate(points) {
+  if (points.length < 2) return 0;
+  const fps = (points.length - 1) / (points[points.length - 1].t - points[0].t);
+  return isFinite(fps) ? fps : 0;
 }

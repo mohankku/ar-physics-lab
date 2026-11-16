@@ -1,5 +1,5 @@
 /**
- * Kinematics and least-squares fits for free fall. Pure functions, no DOM.
+ * Kinematics and least-squares fits (free fall, lines, outlier rejection). Pure functions, no DOM.
  * Units: meters, seconds, m/s². "y" grows downward (distance fallen).
  * @module core/physics
  */
@@ -116,35 +116,76 @@ export function fitFreeFall(samples) {
 }
 
 /**
- * fitFreeFall that ignores outliers (false detections, motion blur).
- * Points whose residual exceeds k robust sigmas (from the median absolute
- * residual) are dropped and the fit repeated until nothing changes.
- * @param {Sample[]} samples
- * @param {{k?: number, floor?: number, maxIter?: number, minKeep?: number}} [opts]
- *   floor: smallest sigma in m, so clean data isn't over-trimmed
- * @returns {{fit: FreeFallFit, kept: Sample[], rejected: number}|null}
+ * @typedef {{a: number, b: number, rmse: number, bStdErr: number, n: number}} LineFit
+ *   v = a + b·t; bStdErr: 1σ standard error of the slope
  */
-export function robustFitFreeFall(samples, opts = {}) {
+
+/**
+ * Least-squares line v = a + b·t through samples {t, v}.
+ * @param {{t: number, v: number}[]} samples
+ * @returns {LineFit|null} null when underdetermined
+ */
+export function fitLine(samples) {
+  const n = samples.length;
+  if (n < 2) return null;
+  const tc = mean(samples.map((s) => s.t));
+  const vc = mean(samples.map((s) => s.v));
+  let Stt = 0, Stv = 0;
+  for (const s of samples) {
+    Stt += (s.t - tc) ** 2;
+    Stv += (s.t - tc) * (s.v - vc);
+  }
+  if (!(Stt > 0)) return null;
+  const b = Stv / Stt, a = vc - b * tc;
+  let sse = 0;
+  for (const s of samples) sse += (s.v - (a + b * s.t)) ** 2;
+  const bStdErr = n > 2 ? Math.sqrt(sse / (n - 2) / Stt) : 0;
+  return { a, b, rmse: Math.sqrt(sse / n), bStdErr, n };
+}
+
+/**
+ * Generic outlier rejection around any fit. Points whose residual exceeds
+ * k robust sigmas (from the median absolute residual) are dropped and the
+ * fit repeated until nothing changes. Every original point is judged
+ * against the current model, so a point wrongly dropped early can come back.
+ * @template S, F
+ * @param {S[]} samples
+ * @param {(pts: S[]) => F|null} fit
+ * @param {(f: F, s: S) => number} residual  absolute residual of one point
+ * @param {{k?: number, floor?: number, maxIter?: number, minKeep?: number}} [opts]
+ *   floor: smallest sigma, so clean data isn't over-trimmed
+ * @returns {{fit: F, kept: S[], rejected: number}|null}
+ */
+export function robustFit(samples, fit, residual, opts = {}) {
   const k = opts.k ?? 3.5;
   const floor = opts.floor ?? 0.003;
   const maxIter = opts.maxIter ?? 4;
   const minKeep = Math.max(4, opts.minKeep ?? Math.ceil(samples.length * 0.6));
   let kept = samples;
-  let fit = fitFreeFall(kept);
-  for (let it = 0; fit && it < maxIter; it++) {
-    const model = (t) => fit.y0 + fit.v0 * t + fit.g / 2 * t * t;
-    // Judge every original point against the current model, so a point
-    // wrongly dropped early can come back.
-    const res = samples.map((s) => Math.abs(s.y - model(s.t)));
+  let f = fit(kept);
+  for (let it = 0; f && it < maxIter; it++) {
+    const res = samples.map((s) => residual(f, s));
     const sigma = Math.max(floor, 1.4826 * median(res));
     const next = samples.filter((s, i) => res[i] <= k * sigma);
     if (next.length < minKeep || next.length === kept.length) break;
-    const refit = fitFreeFall(next);
+    const refit = fit(next);
     if (!refit) break;
     kept = next;
-    fit = refit;
+    f = refit;
   }
-  return fit ? { fit, kept, rejected: samples.length - kept.length } : null;
+  return f ? { fit: f, kept, rejected: samples.length - kept.length } : null;
+}
+
+/**
+ * fitFreeFall that ignores outliers (false detections, motion blur).
+ * @param {Sample[]} samples
+ * @param {{k?: number, floor?: number, maxIter?: number, minKeep?: number}} [opts]
+ *   floor: smallest sigma in m (default 3 mm)
+ * @returns {{fit: FreeFallFit, kept: Sample[], rejected: number}|null}
+ */
+export function robustFitFreeFall(samples, opts = {}) {
+  return robustFit(samples, fitFreeFall,
+    (f, s) => Math.abs(s.y - (f.y0 + f.v0 * s.t + f.g / 2 * s.t * s.t)), opts);
 }
 
 function det3(m) {

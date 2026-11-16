@@ -161,6 +161,17 @@ export class ColorTracker {
    * @returns {number|null} width in camera px, or null if unreadable
    */
   measureWidth(video, blob, opts) {
+    const size = this.measureSize(video, blob, opts);
+    return size ? size.w : null;
+  }
+
+  /**
+   * Ball width and height in camera pixels, like measureWidth. A moving
+   * ball blurs along its motion, so use the side across it: width when it
+   * moves mostly vertically, height when it moves mostly sideways.
+   * @returns {{w: number, h: number}|null}
+   */
+  measureSize(video, blob, opts) {
     if (!blob || !video || video.readyState < 2 || !video.videoWidth) return null;
     const VW = video.videoWidth, VH = video.videoHeight;
     // Crop: 2× the blob's box (plus margin), in camera pixels.
@@ -180,8 +191,8 @@ export class ColorTracker {
       d = ctx.getImageData(0, 0, dw, dh).data;
     } catch (e) { return null; }
     const cx = (blob.x * VW - sx) * k, cy = (blob.y * VH - sy) * k;
-    const wPx = blobWidthInPixels(d, dw, dh, cx, cy, opts);
-    return wPx ? wPx / k : null;
+    const size = blobSizeInPixels(d, dw, dh, cx, cy, opts);
+    return size ? { w: size.w / k, h: size.h / k } : null;
   }
 
   _roiContext(w, h) {
@@ -282,6 +293,16 @@ const ROI_MAX = 160; // largest crop side read back for measureWidth
  * @returns {number|null}
  */
 export function blobWidthInPixels(d, w, h, cx, cy, opts = {}) {
+  const size = blobSizeInPixels(d, w, h, cx, cy, opts);
+  return size ? size.w : null;
+}
+
+/**
+ * Width and height (px) of the matching blob nearest (cx, cy): the mean of
+ * its three widest rows and of its three tallest columns.
+ * @returns {{w: number, h: number}|null}
+ */
+export function blobSizeInPixels(d, w, h, cx, cy, opts = {}) {
   const N = w * h;
   const target = opts.target || COLOR_PRESETS.red;
   const tol = opts.tol > 0 ? opts.tol : 80, tolSq = tol * tol;
@@ -299,21 +320,25 @@ export function blobWidthInPixels(d, w, h, cx, cy, opts = {}) {
   }
   if (seed < 0) return null;
   // Rows of the connected component containing the seed.
-  const rows = new Int32Array(h);
+  const rows = new Int32Array(h), cols = new Int32Array(w);
   const stack = [seed];
   mask[seed] = 2;
   while (stack.length) {
     const q = stack.pop();
     const qx = q % w, qy = (q / w) | 0;
     rows[qy]++;
+    cols[qx]++;
     if (qx > 0 && mask[q - 1] === 1) { mask[q - 1] = 2; stack.push(q - 1); }
     if (qx < w - 1 && mask[q + 1] === 1) { mask[q + 1] = 2; stack.push(q + 1); }
     if (qy > 0 && mask[q - w] === 1) { mask[q - w] = 2; stack.push(q - w); }
     if (qy < h - 1 && mask[q + w] === 1) { mask[q + w] = 2; stack.push(q + w); }
   }
-  const top = Array.from(rows).sort((a, b) => b - a).slice(0, 3).filter((n) => n > 0);
-  if (!top.length) return null;
-  return top.reduce((a, b) => a + b, 0) / top.length;
+  const top3 = (counts) => {
+    const top = Array.from(counts).sort((a, b) => b - a).slice(0, 3).filter((n) => n > 0);
+    return top.length ? top.reduce((a, b) => a + b, 0) / top.length : 0;
+  };
+  const bw = top3(rows), bh = top3(cols);
+  return bw > 0 && bh > 0 ? { w: bw, h: bh } : null;
 }
 
 function clamp(v, lo, hi) {
