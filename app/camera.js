@@ -1,5 +1,4 @@
-/* The app's one camera, shared by every experiment screen, plus the
- * letterboxed video frame the tracking experiments draw on. */
+/* The app's one camera, shared by every experiment screen. */
 import * as AR from "../core/index.js";
 
 var cam = null, camBack = null;
@@ -32,16 +31,4 @@ export function cameraError(err) {
   if (name === "NoCameraApi") return "This browser can't use the camera (it needs https or localhost).";
   if (name === "NotReadableError") return "Another app is using the camera. Close it and try again.";
   return "The camera couldn't start (" + ((err && err.message) || err) + ").";
-}
-
-/* Size `frame` to the video's shape, as large as fits in `wrap`, centered,
- * so the canvas over it lines up with the camera image pixel for pixel. */
-export function fitFrame(wrap, frame, video) {
-  var W = wrap.clientWidth, H = wrap.clientHeight;
-  var a = video.videoWidth && video.videoHeight ? video.videoWidth / video.videoHeight : 4 / 3;
-  var w = Math.min(W, H * a), h = w / a;
-  frame.style.width = Math.round(w) + "px";
-  frame.style.height = Math.round(h) + "px";
-  frame.style.left = Math.round((W - w) / 2) + "px";
-  frame.style.top = Math.round((H - h) / 2) + "px";
 }

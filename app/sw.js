@@ -3,14 +3,14 @@
  * - Hand tracker (MediaPipe library + model, versioned URLs that never
  *   change): cache first, saved the first time the camera is used.
  * Bump VERSION when the PRECACHE list changes. */
-var VERSION = "v3";
+var VERSION = "v5";
 var APP_CACHE = "physlab-app-" + VERSION;
 var LIB_CACHE = "physlab-lib-v1";
 
 var CORE = ["index", "physics", "analysis", "projectile", "pendulum", "models", "gesture", "calibration",
   "vision", "camera", "sim", "trigger", "replay", "framebuffer", "render"];
 var PRECACHE = [
-  "./", "index.html", "app.css", "app.js", "catch.js", "throw.js", "swing.js", "camera.js", "panels.js", "review.js", "place.js", "util.js", "manifest.webmanifest", "icon.svg", "icon-192.png", "icon-180.png",
+  "./", "index.html", "app.css", "app.js", "catch.js", "throw.js", "swing.js", "camera.js", "panels.js", "handinput.js", "worlds.js", "place.js", "util.js", "manifest.webmanifest", "icon.svg", "icon-192.png", "icon-180.png",
   "../lab/handtrack.js", "../lab/sounds.js", "../lab/catchview.js"
 ].concat(CORE.map(function(m) { return "../core/" + m + ".js"; }));
 

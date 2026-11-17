@@ -14,10 +14,11 @@
 <!-- Plays the app end to end, the way a child would:
        ?exp=catch  (default) three finger drops from different heights;
                    synthetic touches with no hover, like a tablet
-       ?exp=throw  a simulated camera shows a red ball; tap it, press Ready,
-                   the ball is thrown; checks g, speed and angle
-       ?exp=swing  the simulated ball swings on a string; press Start,
-                   checks the period and g
+       ?exp=throw  finger flicks throw the virtual ball; checks speed and
+                   angle against the finger, the arc's top, and the mystery g
+       ?exp=swing  finger pulls the pendulum aside and lets go: 80 cm and
+                   40 cm strings, then a mystery planet; checks the period
+                   against the exact formula, g, and g from the T²-vs-L slope
      Open on a local server: /tests/app-smoke.html?exp=throw
      ?w=390&h=844 for a phone-sized frame. ?headless under headless Chrome,
      which hardly runs animation frames: a 60 Hz timer stands in.
@@ -25,7 +26,6 @@
 <iframe id="app"></iframe>
 <pre id="result">running…</pre>
 <script type="module">
-import { installFakeCamera } from "./app-camera.js";
 import { localGravity } from "../core/physics.js";
 
 var q = new URLSearchParams(location.search);
@@ -34,7 +34,7 @@ var W = +q.get("w") || 1180, H = +q.get("h") || 820;
 if (q.has("quiet")) document.getElementById("result").className = "hide";
 var frame = document.getElementById("app");
 frame.style.width = W + "px"; frame.style.height = H + "px";
-frame.src = "../app/?smoke=" + Date.now() + "#/" + EXP;
+frame.src = "../app/index.html?smoke=" + Date.now() + "#/" + EXP;
 
 var win, doc, log = [];
 var wait = function(ms) { return new Promise(function(r) { setTimeout(r, ms); }); };
@@ -56,16 +56,6 @@ function fire(el, type, fx, fy, pointerType) {
     bubbles: true, cancelable: true, pointerId: 7, pointerType: pointerType || "touch", isPrimary: true,
     clientX: r.left + fx * r.width, clientY: r.top + fy * r.height
   }));
-}
-
-/* Video frames the page receives per second (when the browser can tell). */
-function videoFps(video) {
-  return new Promise(function(resolve) {
-    if (!video.requestVideoFrameCallback) return resolve("n/a");
-    var n = 0, t0 = performance.now();
-    (function tick() { video.requestVideoFrameCallback(function() { n++; tick(); }); })();
-    setTimeout(function() { resolve(Math.round(n * 1000 / (performance.now() - t0))); }, 1000);
-  });
 }
 
 /* ---------- Catch & drop ---------- */
@@ -120,112 +110,141 @@ async function catchTest() {
 
 /* ---------- Throw ---------- */
 async function throwTest() {
-  var cam = fakeCamera();
-  cam.show("throw");
-  $("t-cam").click();
-  await until(function() { return $("t-start").hidden; }, 5000, "the camera");
-  await wait(500);
-  var b = cam.ballAt();
-  fire($("t-canvas"), "pointerdown", b.x, b.y);   // tap the ball: learn its color
+  var cv = $("t-canvas");
+  /* Grab the ball at (x0, y0), then flick the finger to (x1, y1) over `ms`
+   * and lift it while still moving. Returns the planned velocity (m/s). */
+  async function flick(x0, y0, x1, y1, ms) {
+    fire(cv, "pointerdown", x0, y0);
+    await wait(300);
+    var steps = Math.round(ms / 15), t0 = performance.now();
+    for (var i = 1; i <= steps; i++) { await wait(15); fire(cv, "pointermove", x0 + (x1 - x0) * i / steps, y0 + (y1 - y0) * i / steps); }
+    var took = (performance.now() - t0) / 1000;    // timers can run a little late
+    fire(cv, "pointerup", x1, y1);
+    var r = cv.getBoundingClientRect(), h = 2, aspect = r.width / r.height;
+    return { vx: (x1 - x0) * h * aspect / took, vy: -(y1 - y0) * h / took };
+  }
+  function lastRow() {
+    var c = doc.querySelectorAll("#t-rows tr")[0].querySelectorAll("td");
+    return { speed: parseFloat(c[1].textContent), angle: parseFloat(c[2].textContent), dist: c[3].textContent, top: parseFloat(c[4].textContent) };
+  }
+  await wait(400);
+  $("t-touch").click();
   await wait(300);
-  log.push("after tap: " + text("t-status"));
-  await until(function() { return text("t-seen") === "seen ✓"; }, 3000, "the ball to be seen");
-  log.push("camera frames/s: " + await videoFps($("t-video")));
-  var results = [];
-  for (var i = 0; i < 2; i++) {
-    $("t-go").click();
-    var truth = cam.go("throw");
-    await until(function() { return +text("t-count") === i + 1; }, 8000, "throw " + (i + 1) + " to be fitted");
-    log.push("throw " + (i + 1) + ": " + text("t-status"));
-    results.push(truth);
-    cam.show("throw");
-    await wait(600);
+  var plans = [[0.25, 0.6, 0.45, 0.48, 240], [0.25, 0.6, 0.33, 0.4, 240]];   // flatter, then steeper
+  for (var k = 0; k < plans.length; k++) {
+    $("t-reset").click();
+    await wait(200);
+    var pl = plans[k], v = await flick.apply(null, pl);
+    await until(function() { return +text("t-count") === k + 1; }, 6000, "throw " + (k + 1));
+    var row = lastRow(), speed = Math.hypot(v.vx, v.vy), angle = Math.atan2(v.vy, Math.abs(v.vx)) * 180 / Math.PI;
+    log.push("throw " + (k + 1) + ": finger " + speed.toFixed(2) + " m/s at " + angle.toFixed(0) + "°; ball " + row.speed +
+      " m/s at " + row.angle + "°, distance " + row.dist + ", top " + row.top + " | " + text("t-status"));
+    if (!within(row.speed, speed, 6)) return done(false, "throw " + (k + 1) + " speed " + row.speed + ", finger " + speed.toFixed(2));
+    if (Math.abs(row.angle - angle) > 6) return done(false, "throw " + (k + 1) + " angle " + row.angle + ", finger " + angle.toFixed(0));
+    // Top of the arc: vy²/2g from the ball's own launch.
+    var vy = row.speed * Math.sin(row.angle * Math.PI / 180), top = vy * vy / (2 * 9.81);
+    if (Math.abs(row.top - top) > 0.02 + 0.05 * top) return done(false, "top " + row.top + " vs " + top.toFixed(2));
   }
   doc.querySelector("#screen-throw .open-results").click();
   await wait(400);
-  var rows = doc.querySelectorAll("#t-rows tr");
-  var cells = rows[0].querySelectorAll("td");
-  var speed = parseFloat(cells[1].textContent), angle = parseFloat(cells[2].textContent), g = parseFloat(cells[3].textContent);
-  var t = results[1];
-  log.push("last throw: speed " + speed + " (true " + t.speed + "), angle " + angle + " (true " + t.angleDeg +
-    "), g " + g + " (true " + t.g + "); headline " + text("t-g"));
-  if (rows.length !== 2) return done(false, "expected 2 throws, got " + rows.length);
-  if (!within(g, t.g, 5)) return done(false, "g = " + g);
-  // Same tolerances as the bench (tests/bench/bench.js grade()): launch speed
-  // and angle read a little high because the fit starts just after the push.
-  // Headless only: frames are stamped when the app sees them, not when the
-  // camera took them, so the launch instant jitters; launch speed (read at
-  // one instant) is then reported, not graded. g, vx and angle use the whole
-  // flight and are graded everywhere.
-  if (!within(speed, t.speed, 8)) {
-    if (!q.has("headless")) return done(false, "speed = " + speed);
-    log.push("note: launch speed off by " + ((speed / t.speed - 1) * 100).toFixed(1) + "% (not graded headless)");
-  }
-  if (Math.abs(angle - t.angleDeg) > 4) return done(false, "angle = " + angle);
-  var vx = speed * Math.cos(angle * Math.PI / 180);
-  if (!within(vx, Math.abs(t.vx), 5)) return done(false, "sideways speed = " + vx.toFixed(2));
-  if ($("t-review").hidden) return done(false, "no replay after the throw");
-  done(true, "throw: 2 throws, g = " + g.toFixed(2) + ", " + speed + " m/s at " + angle + "°");
+  if ($("t-plot-wrap").hidden || $("t-angle-wrap").hidden) return done(false, "graphs missing");
+  log.push("results: " + text("t-g-label") + " " + text("t-g") + " · " + text("t-summary"));
+  // Mystery planet: the g measured from the flight must match the answer.
+  doc.querySelector("#screen-throw .results [data-close]").click();
+  doc.querySelector('#t-gravity [data-v="mystery"]').click();
+  await wait(200);
+  $("t-reset").click();
+  await wait(200);
+  await flick(0.25, 0.6, 0.4, 0.42, 240);
+  await until(function() { return +text("t-count") === 1; }, 8000, "the mystery throw");
+  doc.querySelector("#screen-throw .open-results").click();
+  await wait(300);
+  $("t-reveal").click();
+  var gm = parseFloat(text("t-g")), truth = parseFloat(text("t-reveal").split("g = ")[1]);
+  log.push("mystery: measured " + text("t-g") + "; " + text("t-reveal"));
+  if (!within(gm, truth, 1)) return done(false, "mystery g " + gm + " vs " + truth);
+  done(true, "throw: 2 finger throws match the finger's speed and angle; mystery g " + gm + " = " + truth);
 }
 
 /* ---------- Swing ---------- */
 async function swingTest() {
-  var cam = fakeCamera();
-  cam.show("pendulum");
-  $("s-cam").click();
-  await until(function() { return $("s-start").hidden; }, 5000, "the camera");
-  await wait(500);
-  var b = cam.ballAt();
-  fire($("s-canvas"), "pointerdown", b.x, b.y);
+  var cv = $("s-canvas"), H = 2, PIV = { x: 0.5, y: 0.15 };
+  var aspect = function() { var r = cv.getBoundingClientRect(); return r.width / r.height; };
+  var at = function(L, deg) {
+    var a = deg * Math.PI / 180;
+    return { x: PIV.x + L * Math.sin(a) / (H * aspect()), y: PIV.y + L * Math.cos(a) / H };
+  };
+  function periodFactor(a) { // 1/AGM(1, cos(a/2)), as in core/pendulum.js
+    var x = 1, y = Math.cos(a / 2);
+    for (var i = 0; i < 20; i++) { var m = (x + y) / 2; y = Math.sqrt(x * y); x = m; }
+    return 1 / x;
+  }
+  /* Grab the hanging ball, pull it to `deg`, let go; wait for the run to be saved. */
+  async function pullAndTime(L, deg, n) {
+    var rest = at(L, 0), pulled = at(L, deg);
+    fire(cv, "pointerdown", rest.x, rest.y);
+    await wait(300);
+    for (var i = 1; i <= 10; i++) { var q = at(L, deg * i / 10); fire(cv, "pointermove", q.x, q.y); await wait(20); }
+    await wait(500);
+    fire(cv, "pointerup", pulled.x, pulled.y);
+    await until(function() { return +text("s-count") === n; }, 60000, "run " + n);
+    var c = doc.querySelectorAll("#s-rows tr")[0].querySelectorAll("td");
+    return { L: +c[1].textContent, deg: parseFloat(c[2].textContent), T: parseFloat(c[3].textContent), g: parseFloat(c[4].textContent) };
+  }
+  function setLength(cm) {
+    $("s-length").value = String(cm);
+    $("s-length").dispatchEvent(new win.Event("change", { bubbles: true }));
+  }
+  await wait(400);
+  $("s-touch").click();
   await wait(300);
-  // String length as in the scene (pivot to the top of the ball).
-  $("s-length").value = String(cam.params.pend.stringM * 100);
-  $("s-length").dispatchEvent(new win.Event("change", { bubbles: true }));
-  var truth = cam.go("pendulum");
-  await wait(1800);                                   // let it start swinging
-  $("s-go").click();
-  await until(function() { return +text("s-count") === 1; }, 40000, "the run to finish");
-  log.push("run: " + text("s-status"));
+  setLength(80);
+  var r1 = await pullAndTime(0.8, 15, 1);
+  var T1 = 2 * Math.PI * Math.sqrt(0.8 / 9.81) * periodFactor(r1.deg * Math.PI / 180);
+  log.push("run 1: L " + r1.L + " cm, pulled " + r1.deg + "°, T " + r1.T + " (formula " + T1.toFixed(3) + "), g " + r1.g + " | " + text("s-status"));
+  if (Math.abs(r1.deg - 15) > 1.5) return done(false, "pull angle " + r1.deg);
+  if (!within(r1.T, T1, 0.5)) return done(false, "T " + r1.T + " vs " + T1.toFixed(3));
+  if (!within(r1.g, 9.81, 0.5)) return done(false, "g " + r1.g);
+  setLength(40);
+  var r2 = await pullAndTime(0.4, 20, 2);
   doc.querySelector("#screen-swing .open-results").click();
   await wait(400);
-  var cells = doc.querySelectorAll("#s-rows tr")[0].querySelectorAll("td");
-  var T = parseFloat(cells[2].textContent), g = parseFloat(cells[3].textContent);
-  log.push("period " + T + " (true " + truth.T.toFixed(4) + "), g " + g + " (true " + truth.g + "); headline " + text("s-g"));
-  if (!within(T, truth.T, 0.5)) return done(false, "T = " + T);
-  if (!within(g, truth.g, 1)) return done(false, "g = " + g);
-  // Second run: a shorter string. The headline then comes from the T²-vs-L slope.
-  doc.querySelector("#screen-swing .results [data-close]").click();
-  cam.params.pend.stringM = 0.4;
-  $("s-length").value = "40";
-  $("s-length").dispatchEvent(new win.Event("change", { bubbles: true }));
-  var truth2 = cam.go("pendulum");
-  await wait(1800);
-  $("s-go").click();
-  await until(function() { return +text("s-count") === 2; }, 40000, "the second run to finish");
-  doc.querySelector("#screen-swing .open-results").click();
-  await wait(400);
-  var T2 = parseFloat(doc.querySelectorAll("#s-rows tr")[0].querySelectorAll("td")[2].textContent);
-  var gFit = parseFloat(text("s-g"));
-  log.push("run 2 (40 cm): period " + T2 + " (true " + truth2.T.toFixed(4) + "); from the slope g " + gFit + "; " + text("s-summary"));
-  if (!within(T2, truth2.T, 0.5)) return done(false, "T2 = " + T2);
-  if (!within(gFit, 9.81, 1)) return done(false, "g from the slope = " + gFit);
+  var gSlope = parseFloat(text("s-g"));
+  log.push("run 2: L " + r2.L + " cm, pulled " + r2.deg + "°, T " + r2.T + "; g from the slope " + gSlope + " | " + text("s-summary"));
+  if (!within(gSlope, 9.81, 0.5)) return done(false, "g from the slope " + gSlope);
   if ($("s-runs-wrap").hidden) return done(false, "no T²-vs-L graph");
-  done(true, "swing: T = " + T + " s and " + T2 + " s, g from the slope = " + gFit.toFixed(2));
+  // Mystery planet.
+  doc.querySelector("#screen-swing .results [data-close]").click();
+  doc.querySelector('#s-gravity [data-v="mystery"]').click();
+  await wait(300);
+  setLength(60);
+  var r3 = await pullAndTime(0.6, 15, 1);
+  doc.querySelector("#screen-swing .open-results").click();
+  await wait(300);
+  $("s-reveal").click();
+  var truth = parseFloat(text("s-reveal").split("g = ")[1]);
+  log.push("mystery: measured " + r3.g + "; " + text("s-reveal"));
+  if (!within(r3.g, truth, 1)) return done(false, "mystery g " + r3.g + " vs " + truth);
+  // Air: a light basketball's swing dies away, and the app says it stopped.
+  doc.querySelector("#screen-swing .results [data-close]").click();
+  doc.querySelector('#s-ball [data-v="basketball"]').click();
+  var rest = at(0.6, 0), pulled = at(0.6, 15);
+  fire(cv, "pointerdown", rest.x, rest.y);
+  await wait(300);
+  for (var i = 1; i <= 10; i++) { var q = at(0.6, 1.5 * i); fire(cv, "pointermove", q.x, q.y); await wait(20); }
+  await wait(500);
+  fire(cv, "pointerup", pulled.x, pulled.y);
+  await until(function() { return /It stopped/.test(text("s-status")); }, 120000, "the swing to die away");
+  log.push("basketball: " + text("s-status"));
+  done(true, "swing: T " + r1.T + " s (formula " + T1.toFixed(3) + "), g from the slope " + gSlope + ", mystery " + r3.g + " = " + truth + "; the basketball's swing died away");
 }
 
-/* Headless: one shared tick draws the camera frame, then runs the app's
- * animation callbacks, so every app frame sees a fresh camera frame. */
-var tickers = [], tickTimer = 0, camHook = null;
+/* Headless: one shared tick runs the app's animation callbacks. */
+var tickers = [], tickTimer = 0;
 function headlessTick() {
   tickTimer = 0;
-  if (camHook) camHook();
   var run = tickers; tickers = [];
   run.forEach(function(e) { if (!e.cancelled) e.cb(win.performance.now()); });
-}
-function fakeCamera() {
-  var cam = installFakeCamera(win, { manual: q.has("headless") });
-  if (q.has("headless")) camHook = cam.draw;
-  return cam;
 }
 
 frame.onload = function() {
@@ -242,8 +261,6 @@ frame.onload = function() {
       return e.id;
     };
     win.cancelAnimationFrame = function(id) { if (byId[id]) byId[id].cancelled = true; delete byId[id]; };
-    // No video frame callbacks either: the app falls back to "each tick is a frame".
-    delete win.HTMLVideoElement.prototype.requestVideoFrameCallback;
   }
   var run = { "catch": catchTest, "throw": throwTest, "swing": swingTest }[EXP];
   wait(300).then(run).catch(function(e) { done(false, String(e && e.message || e)); });

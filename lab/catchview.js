@@ -20,7 +20,8 @@ export function pickMystery(prev) {
 export function planetName(g) { return PLANETS[g] || "an imaginary planet"; }
 
 /* Mouse / touch as a hand: pressed = fist, hovering = open hand.
- * pt: {inside, down, x, y, upAt (ms)}; prev: last frame's hand (or null).
+ * pt: {inside, down, x, y, t (ms, when it was at x, y), upAt (ms)};
+ * prev: last frame's hand (or null).
  * A finger has no hover, so it is shown as an open hand for the first
  * frame of a press (or the fist would already be "closed" when first
  * seen, and first sightings don't count as a grab), and for a moment after
@@ -30,7 +31,8 @@ export function pointerHand(pt, prev, now) {
   var lingering = !pt.down && now - (pt.upAt || -Infinity) < LIFT_MS;
   if (!pt.down && !pt.inside && !lingering) return null;
   var closed = pt.down && !!prev;
-  return { x: pt.x, y: pt.y, open: closed ? 0 : 1, lm: null };
+  // t: when the finger was last at (x, y) — truer than the frame's time.
+  return { x: pt.x, y: pt.y, open: closed ? 0 : 1, lm: null, t: pt.t };
 }
 
 /* g from the slope of t² vs h through the origin (t² = (2/g)·h).

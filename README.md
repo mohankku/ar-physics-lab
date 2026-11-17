@@ -22,11 +22,23 @@ measured data to fit, measured-vs-simulated overlays and what-if sweeps come nex
 **The app (`app/`, in progress).** The school experiments are moving into an
 installable, touch-first app: a home screen of experiment cards, the camera filling
 the screen, big buttons, and results in a side column (tablets, laptops) or a bottom
-sheet (phones). All three experiments are in it: **Catch & drop** (hand gestures, or
-finger/mouse), **Throw** (tap the ball once to teach its color, press Ready, throw; g,
-launch speed and angle, slow-motion replay with a ghost Earth throw) and **Swing**
-(type the string length, press Start; times N swings, and every run goes into a T²-vs-L
-graph, so changing the string shows what sets the beat). Earth's g is the real value
+sheet (phones). All three experiments use a **virtual ball you control with your
+hand** (camera hand tracking, or a finger/mouse: press and hold = fist), so no props
+are needed:
+- **Catch & drop**: catch the ball with a fist, open your hand to drop it; drops from
+  different heights line up on a t²-vs-h graph whose slope gives g.
+- **Throw**: grab the ball, swing your arm, open your hand: it leaves with your hand's
+  speed and direction (measured as the hand starts to open) and flies as a projectile.
+  Arrows show its two speeds (across never changes; up-down changes by g every second).
+  Results: distance, top of the arc, the path-and-speeds graph, and how far each throw
+  went for its speed against its angle (45° goes farthest).
+- **Swing**: a ball on a string hangs from the top of the screen. Grab it, pull it
+  aside, let go: it swings by the full pendulum equation and each pass through the
+  middle is timed. Each run (string length, pull, period, g) goes into a table and a
+  T²-vs-L graph, so changing the string shows what sets the beat and what doesn't.
+
+Every experiment can run on Earth (the real g where you are), the Moon, Mars, Jupiter
+or a mystery planet whose g the child measures, and in slow motion. Earth's g is the real value
 **where the child is**: Settings → "Where are you?" takes the device's location (or a
 typed latitude and height) and computes WGS84 normal gravity, from 9.780 m/s² at the
 equator to 9.832 m/s² at the poles (`localGravity` in core/physics.js). Catch & drop's
@@ -34,8 +46,8 @@ Earth ball falls with it, and all three experiments compare against it. The plac
 kept on the device only (latitude rounded to ~1 km, no address lookup); until it's
 set, Earth's g is 9.81. It's a Progressive Web App: **Install app** in Chrome/Edge/Android, or Share →
 Add to Home Screen on iPad/iPhone, and it works offline once the hand tracker has
-been used once. Catch & drop uses the front camera (you face it); Throw and Swing use
-the back camera (the device watches the ball), and a Settings switch flips either.
+been used once. It uses the front camera (you face it, mirrored like a mirror); a
+Settings switch picks the back one.
 The screen stays awake while an experiment runs. The same code can later be
 wrapped for the app stores (e.g. Capacitor) without a rewrite. The classic page
 (`index.html`) stays as it is until the app has every experiment.
@@ -49,12 +61,13 @@ Live: <https://mohankku.github.io/ar-physics-lab/> · also embedded at
 app/                the app (PWA): open app/
   index.html          home screen + the three experiment screens
   app.js              routing (#/, #/catch, #/throw, #/swing), install button, service worker
-  catch.js            Catch & drop: hand tracking or touch, full-screen camera
-  throw.js            Throw: color tracking, auto start/stop, fit, replay
-  swing.js            Swing: timed swings, runs table, T²-vs-L graph
-  camera.js           the one shared camera; picture frame that keeps the camera's shape
+  catch.js            Catch & drop (core CatchBall)
+  throw.js            Throw (core ThrowBall): flight arrows, distance, angle graph
+  swing.js            Swing (core SwingBall): timed swings, runs table, T²-vs-L graph
+  handinput.js        the hand: camera hand tracking or finger/mouse, for every screen
+  worlds.js           Earth (local g) / Moon / Mars / Jupiter / mystery planet
+  camera.js           the one shared camera
   panels.js           Results (side column / bottom sheet) and Settings panels
-  review.js           slow-motion replay and frame-by-frame slider after a throw
   place.js            where the child is → Earth's local g (device location or typed)
   app.css             touch-first styles, light/dark
   sw.js               offline: app files network-first, hand tracker cache-first
@@ -74,7 +87,8 @@ core/               AR engine (ES modules, no dependencies)
   framebuffer.js      FrameRing: recent frames kept for stepping through a fall
   physics.js          kinematics, least-squares (quadratic, line) and outlier-robust fits
   sim.js              FreeFall (Simulate) and HandBall, exact closed-form motion
-  gesture.js          hand openness from landmarks, grab/release gestures, CatchBall
+  gesture.js          hand openness, grab/release gestures; the virtual balls:
+                        CatchBall (drop), ThrowBall (throw), SwingBall (pendulum)
   models.js           engineering models for the workbench: simulateFall (quadratic air drag)
   render.js           canvas drawing: realistic balls, overlays, result plots
 lab/                the experiment page
@@ -166,18 +180,17 @@ They play the app the way a child would and check the Results panel:
 - **catch**: types the equator as the location, makes three drops by finger touches (no
   hover, like a tablet) and expects g = 9.780; then fakes "Use my location" and checks
   Earth's g updates. Your own saved location is put back afterwards.
-- **throw**: a simulated camera (`tests/app-camera.js`, using the bench scenes) shows a
-  red ball. The test taps it, presses Ready, and the ball is thrown twice. Graded with
-  the bench's tolerances: g ±5%, sideways speed ±5%, launch speed ±8%, angle ±4°.
-- **swing**: runs with an 80 cm and then a 40 cm string. Period ±0.5%, g ±1%, also g
-  from the T²-vs-L slope.
+- **throw**: two finger flicks at different angles: the ball must leave at the
+  finger's speed (±6%) and angle (±6°) and reach the right height; then a throw on
+  the mystery planet, whose measured g must match the revealed answer.
+- **swing**: the finger pulls the pendulum aside and lets go: 80 cm (period vs the
+  exact formula ±0.5%), 40 cm (g from the T²-vs-L slope), then a mystery planet.
 
 Add `?w=390&h=844` for a phone-sized frame and `?quiet` to hide the log box. Under
-headless Chrome add `?headless`. Headless Chrome hardly runs animation or video-frame
-callbacks, so one timer draws each camera frame and then runs the app's frame. Frames
-are then timed when the app sees them, not when they were taken, so the throw's launch
-speed (read at one instant) is reported but not graded. The title ends `PASS …` or
-`FAIL …`.
+headless Chrome add `?headless` (it hardly runs animation frames, so a timer stands
+in). No server? Headless Chrome can also open it straight from disk with
+`--allow-file-access-from-files` and a `file://…/tests/app-smoke.html?headless&exp=…`
+URL. The title ends `PASS …` or `FAIL …`.
 
 **Test bench (browser, no ball needed).** Open
 <http://localhost:8000/tests/bench.html>. It's the real lab with the camera replaced

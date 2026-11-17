@@ -4,38 +4,34 @@
  * in fractions of the visible stage, whose bottom edge is the floor.
  * Physics: core/gesture.js (CatchBall). Drawing and the fit: lab/catchview.js. */
 import * as AR from "../core/index.js";
-import { loadHandTracker, HandTracker } from "../lab/handtrack.js";
 import { Sounds } from "../lab/sounds.js";
 import {
-  drawCatchScene, plotDrops, summarizeDrops, pickMystery, planetName, inkOf, pointerHand
+  drawCatchScene, plotDrops, summarizeDrops, inkOf
 } from "../lab/catchview.js";
 import { store, $, keepAwake } from "./util.js";
-import { startCamera, stopCamera, cameraError } from "./camera.js";
+import { makeHandInput } from "./handinput.js";
+import { makeWorld } from "./worlds.js";
 import { makePanels } from "./panels.js";
 import { Place } from "./place.js";
 
 var R = AR.render;
 var MAX_TRIALS = 50;
-var NO_HAND_HINT_MS = 2500;
-var WORLDS = { "earth": "Earth", "1.62": "Moon", "3.71": "Mars", "24.79": "Jupiter", "mystery": "Mystery planet" };
 
 export var Catch = {
   ball: new AR.CatchBall(),
-  tracker: null,
-  source: null,         // "camera" | "touch" while running
-  live: false, raf: 0, clock: null,
-  hand: null, lastHandAt: 0, hinted: false,
-  pointer: { inside: false, down: false, x: 0.5, y: 0.5 },
+  input: null,          // hand from the camera or a finger (handinput.js)
+  world: null,          // Earth / Moon / … / mystery (worlds.js)
+  live: false, raf: 0,
+  hand: null,
   trail: [], drop: null, trials: [],
   settings: null,
-  mysteryG: null, revealed: false,
   skin: null,
 
   /* ---------- settings ---------- */
   loadSettings: function() {
     var s = store.get("catch", {});
     this.settings = {
-      gravity: s.gravity === "9.81" ? "earth" : WORLDS[s.gravity] ? s.gravity : "earth",
+      gravity: s.gravity === "9.81" ? "earth" : s.gravity || "earth",
       slow: ["1", "0.5", "0.25"].indexOf(s.slow) >= 0 ? s.slow : "1",
       ball: R.isBallStyle(s.ball) ? s.ball : "tennis",
       view: s.view > 0.3 && s.view <= 20 ? s.view : 2,
@@ -45,16 +41,9 @@ export var Catch = {
     };
   },
   saveSettings: function() { store.set("catch", this.settings); },
-  mystery: function() { return this.settings.gravity === "mystery"; },
-  /* g of the chosen world; Earth's is the one where the child is. */
-  realG: function() {
-    return this.settings.gravity === "earth" ? Place.g() : parseFloat(this.settings.gravity);
-  },
-  worldGText: function() {
-    return this.settings.gravity === "earth" ? Place.gText() : this.settings.gravity;
-  },
+  mystery: function() { return this.world.mystery(); },
   params: function() {
-    var g = this.mystery() ? this.mysteryG : this.realG();
+    var g = this.world.g();
     var wrap = $("c-wrap");
     return {
       g: g > 0 ? g : 9.81,
@@ -85,42 +74,28 @@ export var Catch = {
     btn.disabled = true;
     $("c-start-note").textContent = "Loading the hand tracker… (about 18 MB the first time, then it's saved)";
     self.status("Starting the camera…", "");
-    var cam = startCamera($("c-video"), self.settings.back).catch(function(e) {
-      throw { camera: true, err: e };
-    });
-    Promise.all([loadHandTracker(), cam]).then(function(r) {
-      self.tracker = new HandTracker(r[0]);
-      self.run("camera");
+    self.input.startCamera().then(function() {
+      self.run();
       self.status("Show your open hand ✋, then make a fist ✊ on the ball.", "ok");
     }, function(err) {
-      if (err && err.camera && err.err && err.err.name === "AbortError") return;
-      var msg = (err && err.camera ? cameraError(err.err) : "The hand tracker couldn't load (check the internet).") +
-        " You can use your finger or the mouse instead.";
-      stopCamera();
-      self.status(msg, "err");
-      $("c-start-note").textContent = msg;
+      if (err && err.aborted) return;
+      self.status(err.message, "err");
+      $("c-start-note").textContent = err.message;
     }).then(function() { btn.disabled = false; });
   },
   startTouch: function() {
     Sounds.unlock();
-    stopCamera();
-    this.run("touch");
+    this.input.startTouch();
+    this.run();
     this.status("Press and hold on the ball to catch it, slide up, then let go.", "ok");
   },
-  run: function(source) {
+  run: function() {
     var self = this;
     self.stop();
-    self.source = source;
     $("c-start").hidden = true;
-    $("c-wrap").classList.toggle("touch-play", source === "touch");
     self.ball.reset(0.5, 0.35);
     self.trail = []; self.drop = null; self.hand = null;
-    self.lastHandAt = performance.now(); self.hinted = false;
     self.live = true;
-    if (source === "camera") {
-      self.clock = new AR.FrameClock($("c-video"));
-      self.clock.start();
-    }
     keepAwake(true);
     self.raf = requestAnimationFrame(function(n) { self.loop(n); });
   },
@@ -128,16 +103,12 @@ export var Catch = {
     this.live = false;
     if (this.raf) cancelAnimationFrame(this.raf);
     this.raf = 0;
-    if (this.clock) this.clock.stop();
-    this.clock = null;
-    this.source = null;
-    $("c-wrap").classList.remove("touch-play", "pressing");
     keepAwake(false);
   },
   /* Back to the start card: camera off, loop stopped. */
   leave: function() {
     this.stop();
-    stopCamera();
+    this.input.close();
     $("c-start").hidden = false;
     $("c-start-note").textContent = "The first time, the hand tracker downloads (about 18 MB). Video never leaves this device.";
     this.status("Pick camera or finger to start.", "");
@@ -150,20 +121,9 @@ export var Catch = {
     if (!self.live) return;
     self.raf = requestAnimationFrame(function(n) { self.loop(n); });
     var p = self.params();
-    var fresh = false;
-    if (self.source === "camera") {
-      if (self.clock.next(now)) { self.hand = self.detectHand(now); fresh = true; }
-    } else {
-      self.hand = pointerHand(self.pointer, self.hand, now);
-      fresh = true;
-    }
-    if (fresh) {
-      if (self.hand) { self.lastHandAt = now; self.hinted = false; }
-      else if (self.source === "camera" && !self.hinted && now - self.lastHandAt > NO_HAND_HINT_MS &&
-               self.ball.state !== "falling") {
-        self.hinted = true;
-        self.status("I can't see a hand. Step back so your hand is in the picture.", "err");
-      }
+    var r = self.input.read(now);
+    self.hand = r.hand;
+    if (r.fresh) {
       var ev = self.ball.update(now, self.hand, p);
       if (ev) self.onEvent(ev);
     }
@@ -172,25 +132,6 @@ export var Catch = {
     if (self.ball.state === "falling") self.trail.push({ x: self.ball.x, y: self.ball.y });
     self.draw(p);
     self.readouts(p);
-  },
-
-  /* Hand landmarks → stage fractions. The video is scaled to cover the
-   * stage (cropped on two sides) and flipped when mirrored. */
-  detectHand: function(now) {
-    var video = $("c-video");
-    var lm = null;
-    try { lm = this.tracker.detect(video, now); } catch (e) { lm = null; }
-    if (!lm) return null;
-    var wrap = $("c-wrap"), SW = wrap.clientWidth, SH = wrap.clientHeight;
-    var VW = video.videoWidth, VH = video.videoHeight;
-    var k = Math.max(SW / VW, SH / VH), dw = VW * k, dh = VH * k;
-    var ox = (dw - SW) / 2, oy = (dh - SH) / 2, flip = this.settings.mirror;
-    var shown = lm.map(function(q) {
-      var x = flip ? 1 - q.x : q.x;
-      return { x: (x * dw - ox) / SW, y: (q.y * dh - oy) / SH };
-    });
-    var c = AR.palmCenter(shown);
-    return { x: c.x, y: c.y, open: AR.handOpenness(lm, VW / VH), lm: shown };
   },
 
   onEvent: function(ev) {
@@ -245,20 +186,16 @@ export var Catch = {
       $("c-summary").textContent = "No drops yet. Drop the ball from a few different heights.";
     } else {
       // Earth's g only differs from place to place in the third decimal.
-      var digits = this.settings.gravity === "earth" && Place.get() ? 3 : 2;
-      $("c-g").textContent = s.gFit.toFixed(digits) + " m/s²";
+      $("c-g").textContent = s.gFit.toFixed(this.world.digits()) + " m/s²";
       var txt = "From the slope of " + s.n + (s.n === 1 ? " drop." : " drops.");
       if (s.n < 3 || s.spread < 0.5) txt += " Tip: drop from low, middle and high to make a good line.";
-      else if (this.settings.gravity === "earth") txt += Place.get()
-        ? " The real value where you are (" + Place.describe() + ") is " + Place.gText() + " m/s²."
-        : " Earth's g is about 9.81 m/s². Set your location in Settings for the exact value where you are.";
-      else if (!this.mystery()) txt += " " + this.settings.gravity + " m/s² is the real value for " +
-        WORLDS[this.settings.gravity] + ".";
+      else if (this.world.key === "earth" && !Place.get())
+        txt += " Earth's g is about 9.81 m/s². Set your location in Settings for the exact value where you are.";
+      else txt += this.world.compare();
       $("c-summary").textContent = txt;
     }
     $("c-mystery").hidden = !this.mystery();
-    $("c-reveal").textContent = this.revealed
-      ? "It's " + planetName(this.mysteryG) + ": g = " + this.mysteryG + " m/s²" : "Reveal the answer";
+    $("c-reveal").textContent = this.world.revealText();
     this.plot(s.gFit);
   },
   plot: function(gFit) {
@@ -284,9 +221,7 @@ export var Catch = {
     $("c-theory").textContent = this.mystery() ? "?" : h > 0.01 ? AR.fallTime(h, p.g).toFixed(3) + " s" : "—";
   },
   showWorld: function() {
-    var g = this.settings.gravity;
-    $("c-world").textContent = this.mystery() ? "Mystery planet · g = ?"
-      : WORLDS[g] + " · g = " + this.worldGText() + " m/s²" + (g === "earth" && Place.get() ? " here" : "");
+    $("c-world").textContent = this.world.label();
     $("c-earth-g").textContent = Place.gText();
   },
 
@@ -310,11 +245,11 @@ export var Catch = {
       mark();
     };
     seg("c-gravity", "gravity", function() {
-      if (self.mystery()) { self.mysteryG = pickMystery(self.mysteryG); self.revealed = false; }
+      self.world.set(s.gravity);
       self.trials = [];          // new world, new table
       self.showWorld();
       self.renderResults();
-      self.toast(self.mystery() ? "New mystery planet. Drop to find its g!" : "Now on " + WORLDS[s.gravity], "info");
+      self.toast(self.mystery() ? "New mystery planet. Drop to find its g!" : "Now on " + self.world.name(), "info");
     });
     seg("c-slow", "slow");
     seg("c-ball", "ball", function() { self.skin = R.makeBall(s.ball); if (!self.live) self.drawIdle(); });
@@ -344,39 +279,10 @@ export var Catch = {
     toggle("c-backcam", "back", function() {
       // The facing camera is mirrored, the back camera isn't.
       s.mirror = !s.back; $("c-mirror").checked = s.mirror; applyMirror(); self.saveSettings();
-      var wasLive = self.source === "camera";
-      stopCamera();
+      var wasLive = self.input.source === "camera";
+      self.input.close();
       if (wasLive) self.startCamera();
     });
-  },
-  initPointer: function() {
-    var self = this, cv = $("c-canvas"), wrap = $("c-wrap");
-    var place = function(e) {
-      var r = cv.getBoundingClientRect();
-      self.pointer.x = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
-      self.pointer.y = Math.min(1, Math.max(0, (e.clientY - r.top) / r.height));
-    };
-    cv.addEventListener("pointermove", function(e) {
-      if (self.source !== "touch") return;
-      self.pointer.inside = true; place(e);
-    });
-    cv.addEventListener("pointerdown", function(e) {
-      if (self.source !== "touch") return;
-      e.preventDefault();
-      try { cv.setPointerCapture(e.pointerId); } catch (err) {}
-      self.pointer.inside = true; self.pointer.down = true; place(e);
-      wrap.classList.add("pressing");
-    });
-    var up = function(e) {
-      if (self.source !== "touch") return;
-      if (self.pointer.down) self.pointer.upAt = performance.now();
-      self.pointer.down = false;
-      wrap.classList.remove("pressing");
-      if (e.pointerType !== "mouse") self.pointer.inside = false; // a lifted finger is gone
-    };
-    cv.addEventListener("pointerup", up);
-    cv.addEventListener("pointercancel", up);
-    cv.addEventListener("pointerleave", function() { if (!self.pointer.down) self.pointer.inside = false; });
   },
   /* "Where are you?" in Settings: Earth's g depends on the place. */
   initPlace: function() {
@@ -414,7 +320,7 @@ export var Catch = {
     Place.onChange(function() {
       show();
       self.showWorld();
-      if (self.settings.gravity !== "earth") return;
+      if (self.world.key !== "earth") return;
       self.trials = [];           // drops made with the old g don't belong in the new table
       self.renderResults();
       self.toast("Gravity here: " + Place.gText() + " m/s²", "info");
@@ -424,10 +330,20 @@ export var Catch = {
   init: function() {
     var self = this;
     self.loadSettings();
-    self.mysteryG = pickMystery(null);
+    self.world = makeWorld(self.settings.gravity);
+    self.settings.gravity = self.world.key;
     self.skin = R.makeBall(self.settings.ball);
+    self.input = makeHandInput({ wrap: $("c-wrap"), video: $("c-video"), canvas: $("c-canvas") }, {
+      mirror: function() { return self.settings.mirror; },
+      back: function() { return self.settings.back; },
+      status: function(msg, cls) { self.status(msg, cls); },
+      quiet: function() { return self.ball.state === "falling"; },
+      handBack: function() {
+        self.status(self.ball.state === "held" ? "Got it! Lift it up, then open your hand to drop it."
+          : "I see your hand ✋. Make a fist ✊ on the ball to catch it.", "ok");
+      }
+    });
     self.initSettings();
-    self.initPointer();
     self.showWorld();
     self.initPlace();
 
@@ -440,7 +356,7 @@ export var Catch = {
       self.status("Ball is back in the middle.", "");
     });
     $("c-clear").addEventListener("click", function() { self.trials = []; self.renderResults(); });
-    $("c-reveal").addEventListener("click", function() { self.revealed = true; self.renderResults(); });
+    $("c-reveal").addEventListener("click", function() { self.world.reveal(); self.renderResults(); });
     self.panels = makePanels($("screen-catch"), "catch", function() { self.renderResults(); });
     document.addEventListener("keydown", function(e) {
       if ($("screen-catch").hidden) return;

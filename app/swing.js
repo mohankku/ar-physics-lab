@@ -1,52 +1,69 @@
-/* Experiment 3 in the app: time a real pendulum and get g from
- * T = 2π√(L/g). Tap the ball once so the tracker learns its color, type the
- * string length, set it swinging and press Start: each pass through the
- * middle is timed live, and the run stops by itself after the chosen number
- * of swings (core analyzePendulum). Every run goes into a table and a
- * T²-vs-L graph, so changing the string shows how the beat depends on its
- * length (and not on the swing's size). L = string + ball radius. */
+/* Experiment 3 in the app: a virtual pendulum you set swinging by hand.
+ * A ball hangs on a string from the top of the picture. Make a fist on it,
+ * pull it aside (it stays on its string), open your hand: it swings
+ * (core SwingBall: the full pendulum equation), and each pass through the
+ * middle is timed. After the chosen number of swings the run is saved:
+ * string length, how far it was pulled, the time for one swing, and g from
+ * T = 2π√(L/g). Change the string and swing again: the T²-vs-L graph shows
+ * what sets the beat (the length), and the table what doesn't (the pull). */
 import * as AR from "../core/index.js";
 import { Sounds } from "../lab/sounds.js";
-import { inkOf } from "../lab/catchview.js";
+import { BONES, label, inkOf } from "../lab/catchview.js";
 import { store, $, keepAwake } from "./util.js";
-import { startCamera, stopCamera, cameraError, fitFrame } from "./camera.js";
 import { makePanels } from "./panels.js";
+import { makeHandInput } from "./handinput.js";
+import { makeWorld } from "./worlds.js";
 import { Place } from "./place.js";
 
 var R = AR.render;
-var LIVE_EVERY_S = 0.4;  // re-analyze this often while timing
-var TRAIL_S = 1.5;       // overlay trail
-var MAX_S = 180;         // never time longer than this
 var MAX_RUNS = 30;
 var FOUR_PI2 = 4 * Math.PI * Math.PI;
+var PIVOT = { x: 0.5, y: 0.15 };   // just below the title bar
+var TRAIL_MS = 1200;
+/* How little air slows each ball (quality factor Q: the swing shrinks by
+ * e^(−π/Q) per swing). Light, big balls feel the air most. */
+var BALL_Q = { tennis: 50, basketball: 20, bowling: 400 };
 
 export var Swing = {
-  tracker: new AR.ColorTracker(),
-  settings: null,
-  live: false, raf: 0, clock: null,
-  timing: false,
-  samples: [], widths: [], t0: 0, lastLive: 0, liveRes: null,
+  ball: new AR.SwingBall({ pivot: PIVOT }),
+  input: null, world: null, panels: null,
+  live: false, raf: 0,
+  hand: null,
+  trail: [],
+  saved: false,        // this release's run is already in the table
   runs: [],
-  last: null,           // last finished analysis
-  panels: null,
+  settings: null, skin: null,
 
   loadSettings: function() {
-    var s = store.get("swing", {});
+    var s = store.get("swing2", {});
     this.settings = {
-      color: s.color && s.color.r != null ? s.color : null,
-      ball: AR.BALL_DIAMETERS[s.ball] ? s.ball : "tennis",
-      lengthCm: s.lengthCm >= 5 && s.lengthCm <= 1000 ? s.lengthCm : 80,
-      swings: [5, 10, 20].indexOf(s.swings) >= 0 ? s.swings : 10,
-      back: s.back !== false
+      gravity: s.gravity || "earth",
+      slow: ["1", "0.5", "0.25"].indexOf(s.slow) >= 0 ? s.slow : "1",
+      ball: R.isBallStyle(s.ball) ? s.ball : "tennis",
+      view: s.view > 0.3 && s.view <= 20 ? s.view : 2,
+      lengthCm: s.lengthCm >= 10 && s.lengthCm <= 2000 ? s.lengthCm : 80,
+      swings: [5, 10, 20].indexOf(s.swings) >= 0 ? s.swings : 5,
+      air: s.air !== false,
+      mirror: s.mirror !== false,
+      sound: s.sound !== false,
+      back: s.back === true
     };
   },
-  saveSettings: function() { store.set("swing", this.settings); },
-  colorOpts: function() { return { target: this.settings.color || AR.colorPreset("red"), tol: 80 }; },
-  diameterM: function() { return AR.BALL_DIAMETERS[this.settings.ball]; },
-  /* Pivot to the ball's center. */
-  lengthM: function() { return this.settings.lengthCm / 100 + this.diameterM() / 2; },
-  predictedT: function() { return 2 * Math.PI * Math.sqrt(this.lengthM() / Place.g()); },
-
+  saveSettings: function() { store.set("swing2", this.settings); },
+  /* The longest string that fits under the pivot on screen (cm). */
+  maxLengthCm: function() { return Math.floor((1 - PIVOT.y - 0.06) * this.settings.view * 100); },
+  lengthM: function() { return Math.min(this.settings.lengthCm, this.maxLengthCm()) / 100; },
+  params: function() {
+    var wrap = $("s-wrap");
+    return {
+      g: this.world.g(),
+      h: this.settings.view,
+      L: this.lengthM(),
+      Q: this.settings.air ? BALL_Q[this.settings.ball] || 50 : Infinity,
+      slow: parseFloat(this.settings.slow) || 1,
+      aspect: wrap.clientWidth && wrap.clientHeight ? wrap.clientWidth / wrap.clientHeight : 4 / 3
+    };
+  },
   status: function(msg, cls) {
     var el = $("s-status");
     el.textContent = msg;
@@ -59,230 +76,138 @@ export var Swing = {
     clearTimeout(this._toastT);
     this._toastT = setTimeout(function() { el.className = "toast"; }, 2400);
   },
-  nextStep: function() {
-    if (!this.settings.color) this.status("Tap the ball in the picture, so I know its color.", "");
-    else this.status("Pull the ball a hand's width aside, let go, then press Start.", "");
-  },
 
-  /* ---------- camera ---------- */
-  openCamera: function() {
+  /* ---------- starting and stopping ---------- */
+  startCamera: function() {
     var self = this;
     Sounds.unlock();
     $("s-cam").disabled = true;
-    $("s-start-note").textContent = "Starting the camera…";
-    startCamera($("s-video"), self.settings.back).then(function() {
-      $("s-start").hidden = true;
-      self.layout();
+    $("s-start-note").textContent = "Loading the hand tracker… (about 18 MB the first time, then it's saved)";
+    self.status("Starting the camera…", "");
+    self.input.startCamera().then(function() {
       self.run();
-      self.nextStep();
+      self.status("Make a fist ✊ on the ball, pull it to the side, and open your hand to let go.", "ok");
     }, function(err) {
-      if (err && err.name === "AbortError") return;
-      $("s-start-note").textContent = cameraError(err);
-      self.status(cameraError(err), "err");
+      if (err && err.aborted) return;
+      self.status(err.message, "err");
+      $("s-start-note").textContent = err.message;
     }).then(function() { $("s-cam").disabled = false; });
   },
-  layout: function() { fitFrame($("s-wrap"), $("s-frame"), $("s-video")); },
+  startTouch: function() {
+    Sounds.unlock();
+    this.input.startTouch();
+    this.run();
+    this.status("Press and hold on the ball, pull it to the side, and let go.", "ok");
+  },
   run: function() {
     var self = this;
-    self.stopLoop();
+    self.stop();
+    $("s-start").hidden = true;
+    self.ballBack();
     self.live = true;
-    self.tracker.reset();
-    self.clock = new AR.FrameClock($("s-video"));
-    self.clock.start();
     keepAwake(true);
-    self.raf = requestAnimationFrame(function() { self.loop(); });
+    self.raf = requestAnimationFrame(function(n) { self.loop(n); });
   },
-  stopLoop: function() {
+  stop: function() {
     this.live = false;
     if (this.raf) cancelAnimationFrame(this.raf);
     this.raf = 0;
-    if (this.clock) this.clock.stop();
-    this.clock = null;
     keepAwake(false);
   },
   leave: function() {
-    this.cancel();
-    this.stopLoop();
-    stopCamera();
+    this.stop();
+    this.input.close();
     $("s-start").hidden = false;
-    $("s-start-note").textContent = "Works best with a brightly colored ball and a plain wall behind.";
-    this.status("Open the camera to start.", "");
-    if (this.panels) this.panels.closeSheets();
-    var cv = $("s-canvas");
-    cv.getContext("2d").clearRect(0, 0, cv.width, cv.height);
+    $("s-start-note").textContent = "The first time, the hand tracker downloads (about 18 MB). Video never leaves this device.";
+    this.status("Pick camera or finger to start.", "");
+    this.panels.closeSheets();
+    this.drawIdle();
+  },
+  ballBack: function() {
+    this.ball.reset();
+    this.trail = []; this.saved = false; this.hand = null;
   },
 
   /* ---------- the loop ---------- */
-  loop: function() {
+  loop: function(now) {
     var self = this;
     if (!self.live) return;
-    self.raf = requestAnimationFrame(function() { self.loop(); });
-    var frame = self.clock.next(performance.now());
-    if (!frame) return;
-    var video = $("s-video");
-    var opts = self.colorOpts();
-    var c = self.settings.color ? self.tracker.locate(video, opts) : null;
-    var t = frame.time / 1000;
-    $("s-seen").textContent = !self.settings.color ? "tap it" : c ? "seen ✓" : "not seen";
-    if (self.timing) {
-      if (!self.t0) self.t0 = t;
-      if (c) {
-        var prev = self.samples[self.samples.length - 1];
-        self.samples.push({ t: t, x: c.x, y: c.y });
-        // Size the ball across its motion (it blurs along it).
-        var size = self.tracker.measureSize(video, c, opts);
-        if (size && prev && t > prev.t) {
-          var sideways = Math.abs((c.x - prev.x) * video.videoWidth) > Math.abs((c.y - prev.y) * video.videoHeight);
-          self.widths.push(sideways ? size.h : size.w);
-          if (self.widths.length > 400) self.widths.shift();
-        }
-      }
-      if (t - self.lastLive > LIVE_EVERY_S) {
-        self.lastLive = t;
-        var res = self.analyze();
-        if (res.ok) {
-          self.liveRes = res;
-          self.readouts(res);
-          if (res.periods >= self.settings.swings) { self.finish(); return; }
-        }
-      }
-      if (t - self.t0 > MAX_S) { self.finish(); return; }
+    self.raf = requestAnimationFrame(function(n) { self.loop(n); });
+    var p = self.params();
+    var r = self.input.read(now);
+    self.hand = r.hand;
+    if (r.fresh) {
+      var ev = self.ball.update(now, self.hand, p);
+      if (ev) self.onEvent(ev, p);
     }
-    self.draw(c, t);
+    var pass = self.ball.tick(now, p);
+    if (pass && pass.type === "pass") self.onPass(pass, p);
+    else if (pass && pass.type === "stopped") self.onStopped(pass, p);
+    var b = self.ball.pos(p);
+    self.trail.push({ x: b.x, y: b.y, at: now });
+    while (self.trail.length && now - self.trail[0].at > TRAIL_MS) self.trail.shift();
+    self.draw(p);
+    self.readouts(p);
   },
-  frameHeightM: function() {
-    var v = $("s-video");
-    var s = AR.scaleFromBallWidths(this.widths, this.diameterM());
-    return s && v.videoHeight ? v.videoHeight / s.pxPerM : null;
-  },
-  analyze: function() {
-    var v = $("s-video");
-    return AR.analyzePendulum(this.samples, {
-      lengthM: this.lengthM(),
-      aspect: v.videoWidth && v.videoHeight ? v.videoWidth / v.videoHeight : 4 / 3,
-      frameHeightM: this.frameHeightM()
-    });
-  },
-  draw: function(c, t) {
-    var cv = $("s-canvas");
-    var dims = R.fitCanvas(cv), ctx = cv.getContext("2d");
-    ctx.clearRect(0, 0, dims.w, dims.h);
-    var v = $("s-video");
-    var aspect = v.videoWidth && v.videoHeight ? v.videoWidth / v.videoHeight : 4 / 3;
-    if (this.timing && this.liveRes) {
-      // The middle line: each time the ball crosses it, a half swing is timed.
-      var ce = this.liveRes.center;
-      var dx = -Math.sin(ce.angle) / aspect, dy = Math.cos(ce.angle);
-      ctx.strokeStyle = "rgba(255,255,255,0.85)";
-      ctx.lineWidth = 2 * dims.dpr;
-      ctx.setLineDash([8 * dims.dpr, 6 * dims.dpr]);
-      ctx.beginPath();
-      ctx.moveTo((ce.x - 0.3 * dx) * dims.w, (ce.y - 0.3 * dy) * dims.h);
-      ctx.lineTo((ce.x + 0.3 * dx) * dims.w, (ce.y + 0.3 * dy) * dims.h);
-      ctx.stroke();
-      ctx.setLineDash([]);
+  onEvent: function(ev, p) {
+    if (ev.type === "grabbed") {
+      Sounds.grab();
+      this.saved = false;
+      this.status("Got it! Pull it to the side, then open your hand to let go.", "ok");
+    } else if (ev.type === "released") {
+      Sounds.release();
+      this.saved = false;
+      var deg = Math.abs(ev.angleDeg);
+      this.status(deg < 2
+        ? "Pull it further to the side before you let go."
+        : "Let go at " + Math.round(deg) + "°. Timing " + this.settings.swings + " swings…", "");
     }
-    if (this.timing) {
-      for (var i = this.samples.length - 1; i >= 0; i--) {
-        var s = this.samples[i], age = t - s.t;
-        if (age > TRAIL_S) break;
-        ctx.fillStyle = "rgba(229,72,77," + (0.85 * (1 - age / TRAIL_S)).toFixed(3) + ")";
-        ctx.beginPath(); ctx.arc(s.x * dims.w, s.y * dims.h, 3 * dims.dpr, 0, 2 * Math.PI); ctx.fill();
-      }
-    }
-    if (c) R.drawTrackMarker(ctx, dims, c, this.timing ? "#e5484d" : "#4ecd64");
   },
-  readouts: function(res) {
-    $("s-n").textContent = (res ? Math.floor(res.periods) : 0) + " / " + this.settings.swings;
-    $("s-T").textContent = res ? res.T.toFixed(3) + " s" : "—";
-    $("s-gchip").textContent = res ? res.g.toFixed(2) : "—";
+  onPass: function(pass, p) {
+    if (Math.abs(this.ball.releaseDeg) < 2) return;
+    var size = Math.round(this.ball.amplitude(p) * 180 / Math.PI);
+    if (pass.swings >= 1 && !this.saved) {
+      $("s-status").textContent = "Swing " + pass.swings + " of " + this.settings.swings +
+        ": one swing takes " + pass.period.toFixed(3) + " s. Size now " + size + "°…";
+    } else if (this.saved && pass.swings >= this.settings.swings + 4 && pass.swings % 4 === 0) {
+      $("s-status").textContent = "Still swinging: " + pass.swings + " swings, size now " + size + "°" +
+        (p.Q < Infinity ? ". The air is slowing it down." : ". With no air, it never slows down!");
+    }
+    if (pass.swings >= this.settings.swings && !this.saved) {
+      this.saved = true;
+      this.addRun(pass.period, p);
+    }
   },
 
-  /* ---------- a run ---------- */
-  toggle: function() {
-    Sounds.unlock();
-    if (this.timing) { this.finish(); return; }
-    if (!this.live) { this.status("Open the camera first.", "err"); return; }
-    if (!this.settings.color) { this.status("First tap the ball in the picture, so I know its color.", "err"); return; }
-    this.samples = []; this.widths = []; this.t0 = 0; this.lastLive = 0; this.liveRes = null;
-    this.timing = true;
-    this.readouts(null);
-    $("s-go").textContent = "Stop";
-    $("s-go").classList.remove("accent");
-    Sounds.grab();
-    this.status("Timing… I'll stop by myself after " + this.settings.swings + " swings.", "");
-  },
-  cancel: function() {
-    this.timing = false;
-    $("s-go").textContent = "Start";
-    $("s-go").classList.add("accent");
-  },
-  finish: function() {
-    this.cancel();
-    var res = this.analyze();
-    if (!res.ok) {
-      Sounds.land();
-      this.toast("Let's try that again", "warn");
-      this.status("I couldn't time that: " + res.error + " Press Start to try again.", "err");
-      return;
-    }
-    Sounds.catchAir();
-    this.last = res;
-    this.readouts(res);
-    var L = this.lengthM();
-    // T0: the period of a tiny swing (the size correction the run's g uses too).
-    this.runs.push({ L: L, T: res.T, T0: res.T / res.factor, TErr: res.TStdErr, g: res.g, gErr: res.gStdErr,
-      periods: res.periods, amp: res.amplitudeDeg });
-    if (this.runs.length > MAX_RUNS) this.runs.shift();
-    this.toast("One swing takes " + res.T.toFixed(2) + " s");
-    var pred = this.predictedT();
-    this.status("One full swing takes " + res.T.toFixed(3) + " s, timed over " + res.periods + " swings, so g ≈ " +
-      res.g.toFixed(2) + " m/s². " + "Theory for a " + this.settings.lengthCm + " cm string: " + pred.toFixed(3) +
-      " s. Now try a shorter or longer string!", "ok");
-    this.renderResults();
+  /* The air took all its energy: say so, and save a run cut short. */
+  onStopped: function(ev, p) {
+    var short = !this.saved && Math.abs(this.ball.releaseDeg) >= 2 && ev.swings >= 2;
+    if (short) { this.saved = true; this.addRun(this.ball.period, p, ev.swings); }
+    Sounds.land();
+    this.toast("It stopped", "info");
+    this.status("It stopped after " + ev.swings + " swings (" + Math.round(ev.t) + " s): the air slowed it down." +
+      (this.settings.ball === "bowling" ? "" : " A heavy bowling ball keeps going much longer: try it!") +
+      " Grab it to swing again.", "");
   },
 
   /* ---------- results ---------- */
-  renderResults: function() {
-    var rows = $("s-rows");
-    rows.textContent = "";
-    for (var i = this.runs.length - 1; i >= 0; i--) {
-      var r = this.runs[i], tr = document.createElement("tr");
-      [String(i + 1), (r.L * 100).toFixed(1), r.T.toFixed(3), r.g.toFixed(2)].forEach(function(text) {
-        var td = document.createElement("td"); td.textContent = text; tr.appendChild(td);
-      });
-      rows.appendChild(tr);
-    }
-    var n = this.runs.length;
-    $("s-count").textContent = String(n);
-    var fit = this.fitRuns();
-    var spread = this.lengthSpread();
-    if (!n) {
-      $("s-g").textContent = "—";
-      $("s-summary").textContent = "No runs yet. Each run adds a row here.";
-    } else if (n > 1 && spread >= 0.1) {
-      $("s-g").textContent = fit.toFixed(2) + " m/s²";
-      $("s-summary").textContent = "From the slope of " + n + " runs with different strings. " +
-        "Longer strings swing slower: T² grows in step with L." + Place.compareText();
-    } else {
-      var last = this.runs[n - 1];
-      $("s-g").textContent = last.g.toFixed(2) + " m/s²";
-      $("s-summary").textContent = "From your last run (± " + last.gErr.toFixed(2) + "). " +
-        "Try a different string length: does the time for one swing change?" + Place.compareText();
-    }
-    $("s-plots").hidden = !this.last;
-    if (this.last && this.panels && this.panels.resultsVisible()) {
-      var cv = $("s-plot"), res = this.last;
-      var fh = this.frameHeightM();
-      R.drawPendulumPlot(cv.getContext("2d"), R.fitCanvas(cv), res,
-        function(t) { return AR.pendulumModel(res, t); },
-        fh ? { k: fh * 100, label: "cm" } : { k: 100, label: "% of picture" }, inkOf(cv));
-      this.plotRuns(fit);
-    }
-    $("s-runs-wrap").hidden = n < 2;
+  addRun: function(T, p, timed) {
+    timed = timed || this.settings.swings;
+    var amp0 = Math.abs(this.ball.releaseDeg) * Math.PI / 180;
+    var ampMid = (amp0 + this.ball.amplitude(p)) / 2;      // it shrinks as it swings
+    var T0 = T / AR.periodFactor(ampMid);                  // a tiny swing's period
+    var run = { L: p.L, deg: amp0 * 180 / Math.PI, T: T, T0: T0, g: FOUR_PI2 * p.L / (T0 * T0) };
+    this.runs.push(run);
+    if (this.runs.length > MAX_RUNS) this.runs.shift();
+    Sounds.catchAir();
+    this.toast("One swing: " + T.toFixed(2) + " s");
+    var theory = 2 * Math.PI * Math.sqrt(p.L / p.g) * AR.periodFactor(ampMid);
+    this.status("One swing takes " + T.toFixed(3) + " s (timed over " + timed + " swings)" +
+      (this.world.mystery() ? ", so g ≈ " + run.g.toFixed(2) + " m/s²." : ". The formula says " + theory.toFixed(3) + " s.") +
+      " Now try a different string, or a bigger or smaller pull!", "ok");
+    this.renderResults();
   },
-  /* g from the slope of T₀² vs L through the origin: T₀² = (4π²/g)·L, with
-   * T₀ each run's period corrected to a tiny swing. */
+  /* g from the slope of T₀² vs L through the origin: T₀² = (4π²/g)·L. */
   fitRuns: function() {
     var sll = 0, slt = 0;
     this.runs.forEach(function(r) { sll += r.L * r.L; slt += r.L * r.T0 * r.T0; });
@@ -293,9 +218,39 @@ export var Swing = {
     var Ls = this.runs.map(function(r) { return r.L; });
     return Math.max.apply(null, Ls) - Math.min.apply(null, Ls);
   },
+  renderResults: function() {
+    var rows = $("s-rows");
+    rows.textContent = "";
+    for (var i = this.runs.length - 1; i >= 0; i--) {
+      var r = this.runs[i], tr = document.createElement("tr");
+      [String(i + 1), (r.L * 100).toFixed(0), Math.round(r.deg) + "°", r.T.toFixed(3), r.g.toFixed(2)].forEach(function(text) {
+        var td = document.createElement("td"); td.textContent = text; tr.appendChild(td);
+      });
+      rows.appendChild(tr);
+    }
+    var n = this.runs.length, digits = this.world.digits();
+    $("s-count").textContent = String(n);
+    $("s-g-label").textContent = this.world.mystery() ? "Mystery planet's g" : "Your g";
+    if (!n) {
+      $("s-g").textContent = "—";
+      $("s-summary").textContent = "No runs yet. Each run adds a row here.";
+    } else if (n > 1 && this.lengthSpread() >= 0.1) {
+      $("s-g").textContent = this.fitRuns().toFixed(digits) + " m/s²";
+      $("s-summary").textContent = "From the slope of " + n + " runs with different strings: longer strings swing slower." +
+        this.world.compare();
+    } else {
+      var last = this.runs[n - 1];
+      $("s-g").textContent = last.g.toFixed(digits) + " m/s²";
+      $("s-summary").textContent = "From your last run. Try a different string length: does one swing take longer?" +
+        this.world.compare();
+    }
+    $("s-mystery").hidden = !this.world.mystery();
+    $("s-reveal").textContent = this.world.revealText();
+    $("s-runs-wrap").hidden = n < 2;
+    if (n >= 2 && this.panels && this.panels.resultsVisible()) this.plotRuns(this.fitRuns());
+  },
   plotRuns: function(gFit) {
     var cv = $("s-runs-plot");
-    if (this.runs.length < 2) return;
     var dims = R.fitCanvas(cv), ctx = cv.getContext("2d"), d = dims.dpr, ink = inkOf(cv);
     ctx.clearRect(0, 0, dims.w, dims.h);
     var runs = this.runs;
@@ -313,44 +268,84 @@ export var Swing = {
     ctx.fillStyle = "#e5484d";
     runs.forEach(function(r) { ctx.beginPath(); ctx.arc(A.X(r.L), A.Y(r.T0 * r.T0), 4 * d, 0, 2 * Math.PI); ctx.fill(); });
   },
+
+  /* ---------- drawing ---------- */
+  draw: function(p) {
+    var cv = $("s-canvas");
+    var dims = R.fitCanvas(cv), ctx = cv.getContext("2d"), W = dims.w, H = dims.h, d = dims.dpr;
+    ctx.clearRect(0, 0, W, H);
+    var b = this.ball, px = PIVOT.x * W, py = PIVOT.y * H, pos = b.pos(p);
+    var bx = pos.x * W, by = pos.y * H;
+    // The middle line: each time the ball crosses it, half a swing is timed.
+    ctx.strokeStyle = "rgba(255,255,255,0.35)"; ctx.lineWidth = d;
+    ctx.setLineDash([6 * d, 6 * d]);
+    ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px, py + p.L / p.h * H + 30 * d); ctx.stroke();
+    ctx.setLineDash([]);
+    // Fading trail.
+    var now = performance.now();
+    this.trail.forEach(function(t) {
+      var age = (now - t.at) / TRAIL_MS;
+      ctx.fillStyle = "rgba(78,205,196," + (0.6 * (1 - age)).toFixed(3) + ")";
+      ctx.beginPath(); ctx.arc(t.x * W, t.y * H, 3 * d, 0, 2 * Math.PI); ctx.fill();
+    });
+    // The support, the string, the ball.
+    ctx.fillStyle = "rgba(200,206,220,0.95)";
+    ctx.fillRect(px - 50 * d, py - 8 * d, 100 * d, 8 * d);
+    ctx.strokeStyle = "rgba(240,240,240,0.95)"; ctx.lineWidth = 2 * d;
+    ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(bx, by); ctx.stroke();
+    var r = Math.max(R.ballRadius(dims), 0.035 * Math.min(W, H));
+    R.drawBall(this.skin, ctx, bx, by, r);
+    // The pull angle while holding it.
+    if (b.state === "held" && Math.abs(b.theta) > 0.02) {
+      var arcR = Math.min(80 * d, p.L / p.h * H * 0.4);
+      ctx.strokeStyle = "rgba(245,165,36,0.9)"; ctx.lineWidth = 2 * d;
+      ctx.beginPath();
+      ctx.arc(px, py, arcR, Math.PI / 2, Math.PI / 2 - b.theta, b.theta > 0);
+      ctx.stroke();
+      label(ctx, d, Math.round(Math.abs(b.theta) * 180 / Math.PI) + "°", px + (b.theta > 0 ? 8 : -8) * d,
+        py + arcR + 16 * d, b.theta > 0 ? "left" : "right", 15);
+    }
+    label(ctx, d, "L = " + Math.round(p.L * 100) + " cm", px + 58 * d, py + 4 * d, "left", 12);
+    // The hand.
+    var hand = this.hand;
+    if (hand) {
+      ctx.strokeStyle = b.gate.closed ? "rgba(245,165,36,0.95)" : "rgba(78,205,100,0.95)";
+      ctx.lineWidth = 2 * d;
+      if (hand.lm) {
+        BONES.forEach(function(bn) {
+          ctx.beginPath(); ctx.moveTo(hand.lm[bn[0]].x * W, hand.lm[bn[0]].y * H);
+          ctx.lineTo(hand.lm[bn[1]].x * W, hand.lm[bn[1]].y * H); ctx.stroke();
+        });
+      }
+      ctx.beginPath(); ctx.arc(hand.x * W, hand.y * H, b.catchR * H, 0, 2 * Math.PI);
+      ctx.setLineDash([4 * d, 4 * d]); ctx.stroke(); ctx.setLineDash([]);
+      if (!hand.lm) label(ctx, d, b.gate.closed ? "✊" : "✋", hand.x * W, hand.y * H + 5 * d, "center", 18);
+    }
+  },
+  drawIdle: function() { this.draw(this.params()); },
+  readouts: function(p) {
+    var b = this.ball;
+    $("s-hand").textContent = !this.hand ? "—" : b.gate.closed ? "✊" : "✋";
+    $("s-n").textContent = (b.state === "held" ? 0 : Math.min(b.swings, this.settings.swings)) + " / " + this.settings.swings;
+    var T = b.period, last = this.runs[this.runs.length - 1];
+    $("s-T").textContent = isFinite(T) ? T.toFixed(3) + " s" : last ? last.T.toFixed(3) + " s" : "—";
+    $("s-gchip").textContent = last ? last.g.toFixed(2) : "—";
+  },
+  showWorld: function() { $("s-world").textContent = this.world.label(); },
   showTheory: function() {
-    $("s-theory").textContent = this.predictedT().toFixed(2) + " s";
+    var g = this.world.mystery() ? NaN : this.world.g();
+    $("s-theory").textContent = isFinite(g) ? (2 * Math.PI * Math.sqrt(this.lengthM() / g)).toFixed(2) + " s" : "?";
   },
 
   /* ---------- setup ---------- */
-  pickColor: function(e) {
-    if (!this.live || this.timing) return;
-    var c = this.tracker.sampleAtPoint($("s-video"), e.clientX, e.clientY);
-    if (!c) return;
-    this.settings.color = { r: c.r, g: c.g, b: c.b };
-    this.saveSettings();
-    this.markColor();
-    this.toast("Got the ball's color", "info");
-    this.status("Got it! Pull the ball a hand's width aside, let go, then press Start.", "ok");
-  },
-  markColor: function() {
-    var c = this.settings.color;
-    $("s-color").querySelectorAll("button").forEach(function(b) {
-      var p = AR.COLOR_PRESETS[b.getAttribute("data-v")];
-      b.setAttribute("aria-checked", c && p && c.r === p.r && c.g === p.g && c.b === p.b ? "true" : "false");
-    });
-    $("s-swatch").style.background = c ? "rgb(" + c.r + "," + c.g + "," + c.b + ")" : "transparent";
-  },
   initSettings: function() {
     var self = this, s = self.settings;
-    $("s-color").addEventListener("click", function(e) {
-      var b = e.target.closest("button");
-      if (!b) return;
-      s.color = AR.colorPreset(b.getAttribute("data-v"));
-      self.saveSettings(); self.markColor();
-      if (self.live && !self.timing) self.nextStep();
-    });
-    self.markColor();
-    var seg = function(group, key, values, label, after) {
-      values.forEach(function(v) {
+    var seg = function(id, key, after, values, labelOf) {
+      var group = $(id);
+      if (values) values.forEach(function(v) {
         var b = document.createElement("button");
         b.type = "button"; b.setAttribute("role", "radio"); b.setAttribute("data-v", String(v));
-        b.textContent = label(v);
+        b.textContent = labelOf(v);
         group.appendChild(b);
       });
       var mark = function() {
@@ -363,68 +358,118 @@ export var Swing = {
         if (!b) return;
         var v = b.getAttribute("data-v");
         s[key] = typeof s[key] === "number" ? +v : v;
-        self.saveSettings(); mark();
+        mark(); self.saveSettings();
         if (after) after();
       });
       mark();
     };
-    seg($("s-ballkind"), "ball", Object.keys(AR.BALL_DIAMETERS), function(name) {
-      return name.replace(/ \(.*\)/, "").replace(/^./, function(ch) { return ch.toUpperCase(); }) +
-        " · " + (AR.BALL_DIAMETERS[name] * 100).toFixed(1) + " cm";
-    }, function() { self.showTheory(); });
-    seg($("s-swings"), "swings", [5, 10, 20], function(v) { return v + " swings"; }, function() {
-      if (!self.timing) self.readouts(self.last);
+    seg("s-gravity", "gravity", function() {
+      self.world.set(s.gravity);
+      self.runs = [];
+      self.ballBack();
+      self.showWorld(); self.showTheory();
+      self.renderResults();
+      self.toast(self.world.mystery() ? "New mystery planet. Swing to find its g!" : "Now on " + self.world.name(), "info");
+    });
+    seg("s-slow", "slow");
+    seg("s-ball", "ball", function() { self.skin = R.makeBall(s.ball); if (!self.live) self.drawIdle(); });
+    seg("s-swings", "swings", null, [5, 10, 20], function(v) { return v + " swings"; });
+    var view = $("s-view");
+    view.value = s.view;
+    view.addEventListener("change", function() {
+      var v = parseFloat(view.value);
+      s.view = v >= 0.3 && v <= 20 ? v : 2;
+      view.value = s.view; self.saveSettings();
+      self.applyLength();
     });
     var len = $("s-length");
     len.value = s.lengthCm;
-    len.addEventListener("change", function() {
+    var setLen = function(commit) {
       var v = parseFloat(len.value);
-      if (v >= 5 && v <= 1000) s.lengthCm = v;
-      len.value = s.lengthCm;
-      self.saveSettings();
-      self.showTheory();
+      if (v >= 10 && v <= 2000) {
+        s.lengthCm = v;
+        self.applyLength();
+      } else if (commit) {
+        len.value = s.lengthCm;
+      }
+      if (commit) { len.value = Math.round(self.lengthM() * 100); s.lengthCm = +len.value; self.saveSettings(); }
+    };
+    len.addEventListener("input", function() { setLen(false); });
+    len.addEventListener("change", function() { setLen(true); });
+    var toggle = function(id, key, after) {
+      var el = $(id);
+      el.checked = !!s[key];
+      el.addEventListener("change", function() { s[key] = el.checked; self.saveSettings(); if (after) after(); });
+    };
+    var applyMirror = function() { $("s-wrap").classList.toggle("mirrored", s.mirror); };
+    toggle("s-mirror", "mirror", applyMirror);
+    applyMirror();
+    toggle("s-sound", "sound", function() { Sounds.enabled = s.sound; if (s.sound) { Sounds.unlock(); Sounds.grab(); } });
+    toggle("s-air", "air", function() {
+      self.toast(s.air ? "Air is back: it will slow down" : "No air: it will swing forever", "info");
     });
-    len.addEventListener("input", function() {
-      var v = parseFloat(len.value);
-      if (v >= 5 && v <= 1000) { s.lengthCm = v; self.showTheory(); }
+    toggle("s-backcam", "back", function() {
+      s.mirror = !s.back; $("s-mirror").checked = s.mirror; applyMirror(); self.saveSettings();
+      var wasLive = self.input.source === "camera";
+      self.input.close();
+      if (wasLive) self.startCamera();
     });
-    var back = $("s-backcam");
-    back.checked = s.back;
-    back.addEventListener("change", function() {
-      s.back = back.checked; self.saveSettings();
-      if (self.live) { self.cancel(); self.stopLoop(); stopCamera(); self.openCamera(); }
-    });
+  },
+  /* A new string length: the swing starts over (its timing would mix two lengths). */
+  applyLength: function() {
+    $("s-length").max = String(this.maxLengthCm());
+    this.ball.reset();
+    this.trail = []; this.saved = false;
+    this.showTheory();
+    if (!this.live) this.drawIdle();
   },
   init: function() {
     var self = this;
     self.loadSettings();
+    self.world = makeWorld(self.settings.gravity);
+    self.settings.gravity = self.world.key;
+    self.skin = R.makeBall(self.settings.ball);
+    self.input = makeHandInput({ wrap: $("s-wrap"), video: $("s-video"), canvas: $("s-canvas") }, {
+      mirror: function() { return self.settings.mirror; },
+      back: function() { return self.settings.back; },
+      status: function(msg, cls) { self.status(msg, cls); },
+      quiet: function() { return self.ball.state === "hanging" && self.ball.swings > 0; },
+      handBack: function() {
+        self.status(self.ball.state === "held" ? "Got it! Pull it to the side, then open your hand to let go."
+          : "I see your hand ✋. Make a fist ✊ on the ball to grab it.", "ok");
+      }
+    });
     self.panels = makePanels($("screen-swing"), "swing", function() { self.renderResults(); });
     self.initSettings();
-    self.showTheory();
-    Place.onChange(function() { self.showTheory(); self.renderResults(); });
-    self.readouts(null);
-    $("s-cam").addEventListener("click", function() { self.openCamera(); });
-    $("s-go").addEventListener("click", function() { self.toggle(); });
-    $("s-canvas").addEventListener("pointerdown", function(e) { self.pickColor(e); });
-    $("s-clear").addEventListener("click", function() { self.runs = []; self.last = null; self.renderResults(); });
-    $("s-video").addEventListener("loadedmetadata", function() { self.layout(); });
-    window.addEventListener("resize", function() {
-      if ($("screen-swing").hidden) return;
-      self.layout();
-      self.renderResults();
+    self.showWorld();
+    self.applyLength();
+    $("s-cam").addEventListener("click", function() { self.startCamera(); });
+    $("s-touch").addEventListener("click", function() { self.startTouch(); });
+    $("s-reset").addEventListener("click", function() {
+      self.ballBack();
+      if (!self.live) self.drawIdle();
+      self.status("The ball is still. Grab it and pull it aside.", "");
     });
+    $("s-clear").addEventListener("click", function() { self.runs = []; self.renderResults(); });
+    $("s-reveal").addEventListener("click", function() { self.world.reveal(); self.renderResults(); });
+    Place.onChange(function() { self.showWorld(); self.showTheory(); });
     document.addEventListener("keydown", function(e) {
       if ($("screen-swing").hidden || e.code !== "Space") return;
       var tag = (document.activeElement && document.activeElement.tagName) || "";
       if (tag === "INPUT" || tag === "BUTTON" || tag === "A") return;
       e.preventDefault();
-      self.toggle();
+      $("s-reset").click();
+    });
+    window.addEventListener("resize", function() {
+      if ($("screen-swing").hidden) return;
+      if (!self.live) self.drawIdle();
+      self.renderResults();
     });
     self.renderResults();
   },
   enter: function() {
     var self = this;
     Place.refreshIfAllowed();
-    requestAnimationFrame(function() { self.layout(); self.renderResults(); });
+    requestAnimationFrame(function() { self.drawIdle(); self.renderResults(); });
   }
 };
