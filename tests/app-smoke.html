@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>App smoke test</title>
+<style>
+  body { margin: 0; font: 14px system-ui, sans-serif; background: #555; }
+  iframe { border: 0; display: block; background: #000; }
+  #result { position: fixed; right: 8px; bottom: 8px; margin: 0; padding: 6px 10px; background: #fff; border-radius: 6px; }
+</style>
+</head>
+<body>
+<!-- Plays Catch & drop in the app with synthetic finger touches (no hover,
+     like a tablet): three drops from different heights, then checks the
+     Results panel. Open on a local server: /tests/app-smoke.html
+     Optional ?w=390&h=844 for a phone-sized frame; ?headless under headless
+     Chrome, which hardly runs animation frames: a 60 Hz timer stands in. The page title ends up
+     "PASS …" or "FAIL …". -->
+<iframe id="app"></iframe>
+<pre id="result">running…</pre>
+<script>
+(function() {
+  var q = new URLSearchParams(location.search);
+  var W = +q.get("w") || 1180, H = +q.get("h") || 820;
+  var frame = document.getElementById("app");
+  frame.style.width = W + "px"; frame.style.height = H + "px";
+  frame.src = "../app/?smoke=" + Date.now() + "#/catch";
+
+  var doc, cv, log = [];
+  var HEADLESS = q.has("headless");
+  var wait = function(ms) { return new Promise(function(r) { setTimeout(r, ms); }); };
+  var at = function(fx, fy) {
+    var r = cv.getBoundingClientRect();
+    return { clientX: r.left + fx * r.width, clientY: r.top + fy * r.height };
+  };
+  var fire = function(type, fx, fy) {
+    var p = at(fx, fy);
+    cv.dispatchEvent(new frame.contentWindow.PointerEvent(type, {
+      bubbles: true, cancelable: true, pointerId: 7, pointerType: "touch", isPrimary: true,
+      clientX: p.clientX, clientY: p.clientY
+    }));
+  };
+  var text = function(id) { return doc.getElementById(id).textContent.trim(); };
+  function done(ok, msg) {
+    document.title = (ok ? "PASS " : "FAIL ") + msg;
+    document.getElementById("result").textContent = document.title + "\n" + log.join("\n");
+  }
+  /* Touch the ball at (x, y0), slide it to y1, lift; wait for the landing. */
+  function drop(x, y0, y1) {
+    fire("pointerdown", x, y0);
+    return wait(150).then(function() {
+      log.push("  pressed: hand " + text("c-hand") + ", ball height " + text("c-h"));
+      for (var i = 1; i <= 6; i++) fire("pointermove", x, y0 + (y1 - y0) * i / 6);
+      return wait(500);
+    }).then(function() {
+      fire("pointerup", x, y1);
+      return wait(1200);
+    }).then(function() { log.push("drop from y=" + y1 + ": " + text("c-status")); });
+  }
+
+  frame.onload = function() {
+    doc = frame.contentDocument;
+    var win = frame.contentWindow, frames = 0;
+    win.addEventListener("error", function(e) { log.push("app error: " + e.message + " @" + e.lineno); });
+    win.addEventListener("unhandledrejection", function(e) { log.push("app rejection: " + e.reason); });
+    if (HEADLESS) win.requestAnimationFrame = function(cb) {
+      return win.setTimeout(function() { cb(win.performance.now()); }, 16);
+    };
+    (function count() { frames++; win.requestAnimationFrame(count); })();
+    setTimeout(function() { log.push("animation frames in 1 s: " + frames); }, 1000);
+    cv = doc.getElementById("c-canvas");
+    wait(400).then(function() {
+      doc.getElementById("c-touch").click();
+      return wait(200);
+    }).then(function() { return drop(0.5, 0.35, 0.1); })   // 1.80 m
+      .then(function() { return drop(0.5, 0.98, 0.5); })   // 1.00 m (pick it up off the floor)
+      .then(function() { return drop(0.5, 0.98, 0.75); })  // 0.50 m
+      .then(function() {
+        doc.getElementById("c-open-results").click();
+        return wait(400);
+      }).then(function() {
+        var n = +text("c-count"), g = parseFloat(text("c-g"));
+        var rows = doc.querySelectorAll("#c-rows tr").length;
+        log.push("count " + n + ", rows " + rows + ", g " + text("c-g"));
+        if (n !== 3 || rows !== 3) return done(false, "expected 3 drops, got " + n);
+        if (!(Math.abs(g - 9.81) < 0.02)) return done(false, "g = " + g);
+        done(true, "3 drops, g = " + g.toFixed(2));
+      }).catch(function(e) { done(false, String(e && e.stack || e)); });
+  };
+})();
+</script>
+</body>
+</html>

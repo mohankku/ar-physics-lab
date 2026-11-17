@@ -11,14 +11,10 @@ import { $, setStatus, numberIn, onSpace, remember, recall, restoreSettings, bal
 import { loadHandTracker, HandTracker } from "../handtrack.js";
 import { Sounds } from "../sounds.js";
 import { LabLog } from "../lablog.js";
+import { drawCatchScene, plotDrops, fitDropsG, pickMystery, planetName, inkOf, pointerHand } from "../catchview.js";
 
 var R = AR.render;
 var SETTINGS = [["catch-view", "catch-view"], ["catch-gravity", "catch-g"], ["catch-slow", "catch-slow"]];
-var BONES = [[0, 1], [1, 2], [2, 3], [3, 4], [0, 5], [5, 6], [6, 7], [7, 8], [5, 9], [9, 10], [10, 11],
-  [11, 12], [9, 13], [13, 14], [14, 15], [15, 16], [13, 17], [0, 17], [17, 18], [18, 19], [19, 20]];
-var MYSTERY = [3.7, 8.87, 1.62, 3.71, 24.79, 10.44, 8.69, 11.15, 0.62, 2.3, 15.2, 6.1]; // incl. made-up worlds
-var PLANETS = { 3.7: "Mercury", 8.87: "Venus", 1.62: "the Moon", 3.71: "Mars", 24.79: "Jupiter",
-  10.44: "Saturn", 8.69: "Uranus", 11.15: "Neptune", 0.62: "Pluto" };
 var MAX_TRIALS = 50;
 
 var Catch = {
@@ -118,8 +114,7 @@ var Catch = {
     if (self.source === "camera") {
       if (self.clock.next(now)) { self.hand = self.detectHand(now, p); fresh = true; }
     } else {
-      var pt = self.pointer;
-      self.hand = pt.inside || pt.down ? { x: pt.x, y: pt.y, open: pt.down ? 0 : 1, lm: null } : null;
+      self.hand = pointerHand(self.pointer, self.hand, now);
       fresh = true;
     }
     if (fresh) {
@@ -178,12 +173,7 @@ var Catch = {
     if (this.trials.length > MAX_TRIALS) this.trials.shift();
     this.renderTrials();
   },
-  /* g from the slope of t² vs h through the origin (t² = (2/g)·h). */
-  fitG: function() {
-    var shh = 0, sht = 0;
-    this.trials.forEach(function(tr) { shh += tr.h * tr.h; sht += tr.h * tr.t * tr.t; });
-    return sht > 0 ? 2 * shh / sht : NaN;
-  },
+  fitG: function() { return fitDropsG(this.trials); },
   renderTrials: function() {
     var rows = $("catch-rows");
     rows.innerHTML = "";
@@ -217,78 +207,15 @@ var Catch = {
   },
   plot: function(gFit) {
     var cv = $("catch-plot");
-    var dims = R.fitCanvas(cv), ctx = cv.getContext("2d"), d = dims.dpr;
-    ctx.clearRect(0, 0, dims.w, dims.h);
-    var ink = inkOf(cv);
-    var pts = this.trials;
-    var hMax = Math.max(0.5, Math.max.apply(null, pts.map(function(t) { return t.h; }).concat([0])) * 1.1);
-    var t2Max = Math.max(0.05, Math.max.apply(null, pts.map(function(t) { return t.t * t.t; }).concat([0])) * 1.15);
-    var A = R.chartFrame(ctx, dims, { x: 0, y: 0, w: dims.w, h: dims.h }, [0, hMax], [0, t2Max],
-      ["drop height h (m)", "t² (s²)"], ink);
-    if (pts.length && isFinite(gFit)) {
-      ctx.strokeStyle = "#1a56db";
-      ctx.lineWidth = 2 * d;
-      ctx.beginPath(); ctx.moveTo(A.X(0), A.Y(0)); ctx.lineTo(A.X(hMax), A.Y(2 * hMax / gFit)); ctx.stroke();
-      ctx.fillStyle = "#1a56db";
-      ctx.font = "600 " + (11 * d) + "px system-ui, sans-serif";
-      ctx.fillText("slope = 2/g → g ≈ " + gFit.toFixed(2) + " m/s²", A.X(hMax * 0.04), A.Y(t2Max * 0.86));
-    }
-    ctx.fillStyle = "#e5484d";
-    pts.forEach(function(t) {
-      ctx.beginPath(); ctx.arc(A.X(t.h), A.Y(t.t * t.t), 3.5 * d, 0, 2 * Math.PI); ctx.fill();
-    });
+    plotDrops(cv, this.trials, gFit, inkOf(cv));
   },
 
   /* ---------- drawing ---------- */
   draw: function(p) {
     var cv = $("catch-overlay");
-    var dims = R.fitCanvas(cv), ctx = cv.getContext("2d"), W = dims.w, H = dims.h, d = dims.dpr;
-    ctx.clearRect(0, 0, W, H);
-    // Height ruler: the floor is the bottom of the view.
-    ctx.strokeStyle = "rgba(255,255,255,0.45)";
-    ctx.fillStyle = "rgba(255,255,255,0.85)";
-    ctx.lineWidth = d;
-    ctx.font = (11 * d) + "px system-ui, sans-serif";
-    var step = p.h > 4 ? 1 : 0.5;
-    for (var m = 0; m <= p.h + 1e-9; m += step) {
-      var py = H * (1 - m / p.h);
-      ctx.beginPath(); ctx.moveTo(0, py); ctx.lineTo(10 * d, py); ctx.stroke();
-      if (m > 0) ctx.fillText(m.toFixed(1) + " m", 13 * d, py + 4 * d);
-    }
-    // Drop-height marker: from the release point down to the floor.
-    if (this.drop && this.ball.state !== "held") {
-      var x = this.drop.x * W, y0 = this.drop.y * H;
-      ctx.strokeStyle = "rgba(255,255,255,0.75)";
-      ctx.setLineDash([5 * d, 5 * d]);
-      ctx.beginPath(); ctx.moveTo(x, y0); ctx.lineTo(x, H); ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.beginPath(); ctx.moveTo(x - 8 * d, y0); ctx.lineTo(x + 8 * d, y0); ctx.stroke();
-      label(ctx, d, "h = " + this.drop.h0.toFixed(2) + " m", x - 12 * d, (y0 + H) / 2, "right");
-    }
-    // The hand: skeleton from the camera, or a ring for the pointer.
-    var closed = this.ball.gate.closed;
-    if (this.hand) {
-      ctx.strokeStyle = closed ? "rgba(245,165,36,0.95)" : "rgba(78,205,100,0.95)";
-      ctx.lineWidth = 2 * d;
-      var lm = this.hand.lm;
-      if (lm) {
-        BONES.forEach(function(b) {
-          ctx.beginPath(); ctx.moveTo(lm[b[0]].x * W, lm[b[0]].y * H); ctx.lineTo(lm[b[1]].x * W, lm[b[1]].y * H); ctx.stroke();
-        });
-      }
-      ctx.beginPath();
-      ctx.arc(this.hand.x * W, this.hand.y * H, this.ball.catchR * H, 0, 2 * Math.PI);
-      ctx.setLineDash([4 * d, 4 * d]); ctx.stroke(); ctx.setLineDash([]);
-      if (!lm) label(ctx, d, closed ? "✊" : "✋", this.hand.x * W, this.hand.y * H + 5 * d, "center", 18);
-    }
-    // Trail of the current fall, then the ball.
-    ctx.fillStyle = "rgba(78,205,196,0.6)";
-    this.trail.forEach(function(t) { ctx.beginPath(); ctx.arc(t.x * W, t.y * H, 3 * d, 0, 2 * Math.PI); ctx.fill(); });
-    var r = R.ballRadius(dims);
-    var bx = this.ball.x * W, by = Math.min(H - r, this.ball.y * H);
-    R.drawShadow(ctx, bx, H, r, Math.min(1, this.ball.y));
-    R.drawBall(this.ballSkin || R.makeBall(), ctx, bx, by, r);
-    if (this.ball.state === "falling") label(ctx, d, "t = " + this.ball.t.toFixed(2) + " s", bx + r + 8 * d, by, "left", 14);
+    drawCatchScene(cv.getContext("2d"), R.fitCanvas(cv), {
+      p: p, ball: this.ball, hand: this.hand, drop: this.drop, trail: this.trail, skin: this.ballSkin
+    });
   },
 
   readouts: function(p) {
@@ -301,8 +228,7 @@ var Catch = {
   },
 
   newMystery: function() {
-    var prev = this.mysteryG;
-    do { this.mysteryG = MYSTERY[Math.floor(Math.random() * MYSTERY.length)]; } while (this.mysteryG === prev);
+    this.mysteryG = pickMystery(this.mysteryG);
     $("catch-reveal").textContent = "Reveal";
   },
 
@@ -321,11 +247,12 @@ var Catch = {
     stage.addEventListener("pointerdown", function(e) {
       if (self.source !== "pointer") return;
       e.preventDefault();
-      if (stage.setPointerCapture) stage.setPointerCapture(e.pointerId);
+      try { stage.setPointerCapture(e.pointerId); } catch (err) {}
       self.pointer.inside = true; self.pointer.down = true; place(e);
     });
     var up = function(e) {
       if (self.source !== "pointer") return;
+      if (self.pointer.down) self.pointer.upAt = performance.now();
       self.pointer.down = false;
       if (e.pointerType !== "mouse") self.pointer.inside = false; // a lifted finger is gone
     };
@@ -371,7 +298,7 @@ var Catch = {
     showMystery();
     $("catch-reveal").addEventListener("click", function() {
       var g = self.mysteryG;
-      $("catch-reveal").textContent = "g = " + g + " m/s² (" + (PLANETS[g] || "an imaginary planet") + ")";
+      $("catch-reveal").textContent = "g = " + g + " m/s² (" + planetName(g) + ")";
     });
     $("btn-catch-cam").addEventListener("click", function() { self.startCamera(); });
     $("btn-catch-pointer").addEventListener("click", function() { self.startPointer(); });
@@ -391,23 +318,5 @@ var Catch = {
     self.renderTrials();
   }
 };
-
-/* Text with a dark outline, readable over any video. */
-function label(ctx, d, text, x, y, align, size) {
-  ctx.font = "600 " + ((size || 12) * d) + "px system-ui, sans-serif";
-  ctx.textAlign = align || "left";
-  ctx.lineWidth = 3 * d;
-  ctx.strokeStyle = "rgba(0,0,0,0.6)";
-  ctx.strokeText(text, x, y);
-  ctx.fillStyle = "#fff";
-  ctx.fillText(text, x, y);
-  ctx.textAlign = "start";
-}
-
-/* The canvas's text color as "r,g,b", so charts follow the page theme. */
-function inkOf(el) {
-  var m = /rgba?\((\d+),\s*(\d+),\s*(\d+)/.exec(getComputedStyle(el).color || "");
-  return m ? m[1] + "," + m[2] + "," + m[3] : "0,0,0";
-}
 
 export { Catch };

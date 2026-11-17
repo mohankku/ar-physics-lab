@@ -19,13 +19,31 @@ where scientists and engineers simulate from their own measured parameters
 with air drag (landing time, impact speed and energy, terminal speed, CSV export); importing
 measured data to fit, measured-vs-simulated overlays and what-if sweeps come next.
 
+**The app (`app/`, in progress).** The school experiments are moving into an
+installable, touch-first app: a home screen of experiment cards, the camera filling
+the screen, big buttons, and results in a side column (tablets, laptops) or a bottom
+sheet (phones). Experiment 1, Catch & drop, is there now; the others follow one at a
+time. It's a Progressive Web App: **Install app** in Chrome/Edge/Android, or Share →
+Add to Home Screen on iPad/iPhone, and it works offline once the hand tracker has
+been used once. It uses the front camera by default (a Settings switch picks the
+back one) and keeps the screen awake while playing. The same code can later be
+wrapped for the app stores (e.g. Capacitor) without a rewrite. The classic page
+(`index.html`) stays as it is until the app has every experiment.
+
 Live: <https://mohankku.github.io/ar-physics-lab/> · also embedded at
 <https://mohankku.github.io/physics>.
 
 ## Layout
 
 ```
-index.html          standalone page
+app/                the app (PWA): open app/ — Experiment 1 so far
+  index.html          home screen + experiment screens
+  app.js              routing (#/ and #/catch), install button, service worker
+  catch.js            Catch & drop screen: full-screen camera, panels, settings
+  app.css             touch-first styles, light/dark
+  sw.js               offline: app files network-first, hand tracker cache-first
+  manifest.webmanifest, icon.svg, icon-*.png
+index.html          classic standalone page (all experiments)
 loader.js           embed entry point (public URL; keep at the root)
 core/               AR engine (ES modules, no dependencies)
   index.js            public API — import * as AR from "./core/index.js"
@@ -50,6 +68,8 @@ lab/                the experiment page
   ui.js               shared helpers: status lines, saved settings, the camera
   handtrack.js        loads MediaPipe hand tracking on first use (~18 MB, then cached)
   sounds.js           small synthesized sound effects (Web Audio)
+  catchview.js        Catch & drop drawing, t²-vs-h graph, fit, mouse/touch-as-hand
+                        (shared by lab/modes/catch.js and app/catch.js)
   modes/              one file per mode: catch, track, measure, simulate (Exp 01),
                         projectile (Exp 02), pendulum (Exp 03); shared by the tracking
                         modes: review.js (replay + frame slider), scale.js (calibration)
@@ -109,7 +129,10 @@ The host page should provide Font Awesome 6 and the `.pub-btn` / `.topic-pill` s
 ## Running locally
 
 Any static server works, e.g. `python3 -m http.server` then open
-<http://localhost:8000>. The camera needs `localhost` or HTTPS.
+<http://localhost:8000/app/> (the app) or <http://localhost:8000> (the classic page).
+The camera, install and offline mode need `localhost` or HTTPS. To try it on a
+tablet or phone, it has to be served over HTTPS (e.g. GitHub Pages), since browsers
+block the camera on plain `http://` addresses other than localhost.
 
 ## Tests
 
@@ -120,6 +143,13 @@ RK4-integrated nonlinear swing), tracker, both simulations, both triggers, repla
 mapping, frame buffer, calibration, and the test bench's scenes. The camera tests
 need a browser: with the local server running, open <http://localhost:8000/tests/>
 to run everything.
+
+**App smoke test (browser).** With the server running, open
+<http://localhost:8000/tests/app-smoke.html>. It plays Catch & drop in the app with
+synthetic finger touches (no hover, like a tablet): three drops from different
+heights, then checks the Results panel. Add `?w=390&h=844` for a phone-sized frame.
+Under headless Chrome add `?headless` (it hardly runs animation frames, so a timer
+stands in). The title ends `PASS …` or `FAIL …`.
 
 **Test bench (browser, no ball needed).** Open
 <http://localhost:8000/tests/bench.html>. It's the real lab with the camera replaced
