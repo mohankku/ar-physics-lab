@@ -40,10 +40,18 @@ var Sounds = {
     setTimeout(function() { tone(880, 1320, 0.1, 0.16, "triangle"); }, 70);
   },
   release: function() { if (this.enabled) tone(420, 300, 0.07, 0.08, "sine"); },
-  land: function() {
+  /* A thud on the floor; strength 0..1 (default 1) for softer bounces. */
+  land: function(strength) {
     if (!this.enabled) return;
-    tone(180, 60, 0.22, 0.4, "sine");
-    tone(90, 40, 0.18, 0.25, "square");
+    var k = strength == null ? 1 : Math.max(0.05, Math.min(1, strength));
+    tone(180, 60, 0.22, 0.4 * k, "sine");
+    tone(90, 40, 0.18, 0.25 * k, "square");
+  },
+  /* A bouncy "boing" for a ball leaving the floor; strength 0..1. */
+  bounce: function(strength) {
+    if (!this.enabled) return;
+    var k = Math.max(0.05, Math.min(1, strength == null ? 1 : strength));
+    tone(240, 520, 0.12, 0.22 * k, "triangle");
   }
 };
 

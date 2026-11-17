@@ -8,7 +8,7 @@
  * against its angle (45° goes farthest). Floor = bottom of the picture. */
 import * as AR from "../core/index.js";
 import { Sounds } from "../lab/sounds.js";
-import { BONES, label, inkOf } from "../lab/catchview.js";
+import { BONES, label, inkOf, BOUNCE } from "../lab/catchview.js";
 import { store, $, keepAwake } from "./util.js";
 import { makePanels } from "./panels.js";
 import { makeHandInput } from "./handinput.js";
@@ -51,6 +51,7 @@ export var Throw = {
       g: this.world.g(),
       h: this.settings.view,
       slow: parseFloat(this.settings.slow) || 1,
+      e: BOUNCE[this.settings.ball] || 0,
       aspect: wrap.clientWidth && wrap.clientHeight ? wrap.clientWidth / wrap.clientHeight : 4 / 3
     };
   },
@@ -159,12 +160,17 @@ export var Throw = {
       this.flight = null;
       this.toast("Great catch! 🙌", "info");
       this.status("Caught it! Open your hand to throw again.", "ok");
+    } else if (ev.type === "bounce") {
+      Sounds.bounce(ev.speed / 4);
+    } else if (ev.type === "gone" && ev.bouncing) {
+      this.goneAt = now;           // bounced out of the picture: the throw is already saved
     } else if (ev.type === "landed" || ev.type === "gone") {
       var p0 = this.flight;
-      if (p0) p0.pts.push({ t: ev.t, x: b.x, y: b.y });
+      if (p0) p0.pts.push({ t: ev.t, x: ev.type === "landed" ? ev.x : b.x, y: ev.type === "landed" ? 1 : b.y });
       if (ev.type === "landed") {
         Sounds.land();
-        this.landing = { x: b.x, range: ev.range };
+        if (ev.bounceHeight > 0.01) Sounds.bounce(1);
+        this.landing = { x: ev.x, range: ev.range };
       } else {
         this.goneAt = now;
       }

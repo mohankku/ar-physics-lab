@@ -101,11 +101,61 @@ export class GestureGate {
 
 const FOLLOW_S = 0.04;  // ball follows the palm with this time constant
 const LOST_MS = 350;    // hand gone this long while holding = ball drops
+const MIN_BOUNCE = 0.3; // m/s: a ball leaving the floor slower than this stays down
+const SKID = 0.85;      // share of its sideways speed a ball keeps at each bounce
+
+/*
+ * Bouncing, shared by CatchBall and ThrowBall. At each floor hit the ball
+ * keeps the share p.e of its speed (coefficient of restitution: tennis
+ * ≈ 0.75, basketball ≈ 0.83; 0 = no bounce), so each bounce reaches e²
+ * of the height before. The ball keeps moving sideways (a little slower
+ * each bounce) and can leave through a side. State "bouncing".
+ */
+function startBounce(ball, wallMs, vDown, vx, p) {
+  const e = p.e > 0 ? Math.min(0.95, p.e) : 0;
+  const up = e * vDown;
+  if (up < MIN_BOUNCE) return 0;
+  ball.state = "bouncing";
+  ball._bWall = wallMs;      // wall time of the last floor hit
+  ball._bUp = up;            // speed leaving the floor (m/s)
+  ball._bVx = vx * SKID;     // sideways speed (m/s)
+  ball._bX = ball.x;
+  ball.bounces = 1;
+  return up;
+}
+/* Advance a bouncing ball. Events: "bounce" (a floor hit; height = how high
+ * it goes next), "settled" (stopped bouncing), "gone" (out through a side). */
+function tickBounce(ball, now, p) {
+  const aspect = p.aspect || 4 / 3, e = p.e > 0 ? Math.min(0.95, p.e) : 0;
+  let ev = null;
+  for (;;) {
+    const tau = Math.max(0, (now - ball._bWall) / 1000 * ball._slow);
+    const hop = 2 * ball._bUp / p.g;
+    if (tau < hop) {
+      ball.x = ball._bX + ball._bVx * tau / (p.h * aspect);
+      ball.y = 1 - (ball._bUp * tau - 0.5 * p.g * tau * tau) / p.h;
+      if (ball.x < 0 || ball.x > 1) { ball.state = "gone"; return { type: "gone", bouncing: true }; }
+      return ev;
+    }
+    // Back on the floor.
+    ball._bX += ball._bVx * hop / (p.h * aspect);
+    ball._bWall += hop / ball._slow * 1000;
+    const up = ball._bUp * e;
+    if (up < MIN_BOUNCE) {
+      ball.state = "resting";
+      ball.x = Math.min(1, Math.max(0, ball._bX)); ball.y = 1;
+      return { type: "settled", bounces: ball.bounces };
+    }
+    ball._bUp = up; ball._bVx *= SKID; ball.bounces++;
+    ev = { type: "bounce", n: ball.bounces, speed: up, height: up * up / (2 * p.g) };
+  }
+}
 
 /**
  * A virtual ball: rests until a hand closes on it, follows the closed hand,
  * falls from rest when the hand opens (or vanishes), and can be caught
- * mid-air by closing the hand on it again. States: "resting" | "held" | "falling".
+ * mid-air by closing the hand on it again; it bounces on the floor (p.e).
+ * States: "resting" | "held" | "falling" | "bouncing".
  */
 export class CatchBall {
   /** @param {{catchR?: number}} [opts] catchR: grab reach, in frame heights */
@@ -170,7 +220,8 @@ export class CatchBall {
           return { type: "caught", t: this.t, fallenM: (this.y - this._y0) * p.h };
         }
       }
-      if (this.state === "resting") {
+      if (this.state === "bouncing") this.tick(now, p);
+      if (this.state === "resting" || this.state === "bouncing") {
         this.state = "held";
         return { type: "grabbed" };
       }
@@ -189,10 +240,13 @@ export class CatchBall {
   }
 
   /**
-   * Advance a fall to wall time `now`. Call every animation frame.
+   * Advance a fall (and its bounces) to wall time `now`. Call every frame.
    * @returns {CatchEvent|null} "landed" on the frame it reaches the floor
+   *   (with bounceHeight: how high it bounces back, m, 0 for none); then
+   *   "bounce" / "settled" while it bounces (p.e > 0)
    */
   tick(now, p) {
+    if (this.state === "bouncing") return tickBounce(this, now, p);
     if (this.state !== "falling") return null;
     const tau = Math.max(0, (now - this._t0) / 1000 * this._slow);
     const exactT = Math.sqrt(2 * Math.max(0, 1 - this._y0) * p.h / p.g);
@@ -200,7 +254,9 @@ export class CatchBall {
       this.y = 1;
       this.t = tau; // timed by this frame, as a video would
       this.state = "resting";
-      return { type: "landed", t: tau, exactT, h0: this.h0 };
+      const up = startBounce(this, this._t0 + exactT / this._slow * 1000, p.g * exactT, 0, p);
+      if (up) tickBounce(this, now, p);
+      return { type: "landed", t: tau, exactT, h0: this.h0, bounceHeight: up * up / (2 * p.g) };
     }
     this.t = tau;
     this.y = this._y0 + 0.5 * p.g * tau * tau / p.h;
@@ -216,8 +272,9 @@ const MAX_THROW = 15;        // m/s: faster is a tracking glitch, not a throw
  * closed hand, and when the hand opens it flies off with the hand's
  * velocity (a straight-line fit over the last ~0.1 s), as a projectile
  * under gravity. It lands on the floor (the bottom of the picture), leaves
- * through a side, or is caught mid-air by closing the hand on it.
- * States: "resting" | "held" | "flying". Positions are frame fractions
+ * through a side, or is caught mid-air by closing the hand on it; on the
+ * floor it bounces (p.e) and rolls on. States: "resting" | "held" |
+ * "flying" | "bouncing" | "gone". Positions are frame fractions
  * (y down); velocities are m/s with vy up. Pure: callers pass times in ms.
  */
 export class ThrowBall {
@@ -292,7 +349,8 @@ export class ThrowBall {
           return { type: "caught", t: this.t };
         }
       }
-      if (this.state === "resting") {
+      if (this.state === "bouncing") this.tick(now, p);
+      if (this.state === "resting" || this.state === "bouncing") {
         this.state = "held";
         this._hist = [];
         return { type: "grabbed" };
@@ -360,6 +418,7 @@ export class ThrowBall {
    *   launch (m, 0 when thrown downward); t: exact flight time (s)
    */
   tick(now, p) {
+    if (this.state === "bouncing") return tickBounce(this, now, p);
     if (this.state !== "flying") return null;
     const tau = Math.max(0, (now - this._t0) / 1000 * this._slow);
     const end = this._end(p);
@@ -382,6 +441,10 @@ export class ThrowBall {
     if (end.how === "landed") {
       this.state = "resting";
       this.x = Math.min(1, Math.max(0, q.x)); this.y = 1;
+      ev.x = this.x;      // where it landed (it may bounce on from there)
+      const up = startBounce(this, this._t0 + end.t / this._slow * 1000, p.g * end.t - this.vy, this.vx, p);
+      ev.bounceHeight = up * up / (2 * p.g);
+      if (up) tickBounce(this, now, p);
     } else {
       this.state = "gone";
       this.x = q.x; this.y = q.y;

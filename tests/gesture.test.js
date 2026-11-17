@@ -272,3 +272,44 @@ test("SwingBall: air slows it down until it stops; with no air it keeps going", 
   swingRun(free, { ...p, Q: Infinity }, 15, 60);
   near(free.amplitude(p) * 180 / Math.PI, 15, 0.3, "no air: still swinging at full size");
 });
+
+test("Bounces: each bounce reaches e² of the height before, then it settles", () => {
+  const p = { g: 9.81, h: 2, aspect: 4 / 3, e: 0.75 };
+  const ball = new CatchBall();
+  const ev = run(ball, p, {
+    until: 8, fps: 60,
+    at: (t) => ({ x: 0.5, y: t < 1 ? 0.35 : 0.1 }),               // lift to 1.8 m
+    openAt: (t) => (t < 0.3 ? 1 : t < 1.6 ? 0 : 1)
+  });
+  const land = ev.find((e) => e.type === "landed");
+  near(land.bounceHeight, 0.75 * 0.75 * land.h0, 1e-9, "first bounce: e² of the drop");
+  const hops = ev.filter((e) => e.type === "bounce").map((e) => e.height);
+  assert(hops.length >= 3, "several bounces: " + hops.length);
+  near(hops[0] / land.bounceHeight, 0.5625, 1e-9, "each bounce e² of the last");
+  near(hops[1] / hops[0], 0.5625, 1e-9, "and again");
+  assert(ev[ev.length - 1].type === "settled" && ball.state === "resting" && ball.y === 1, "settles on the floor");
+  // A bowling ball (e = 0) just lands; the timing of the fall is the same.
+  const dead = new CatchBall();
+  const ev2 = run(dead, { ...p, e: 0 }, { until: 4, fps: 60, at: (t) => ({ x: 0.5, y: t < 1 ? 0.35 : 0.1 }), openAt: (t) => (t < 0.3 ? 1 : t < 1.6 ? 0 : 1) });
+  const land2 = ev2.find((e) => e.type === "landed");
+  assert(land2.bounceHeight === 0 && dead.state === "resting", "no bounce");
+  near(land2.exactT, land.exactT, 1e-12, "same fall time");
+});
+
+test("Bounces: a thrown ball bounces on along the floor; you can grab it mid-bounce", () => {
+  const p = { g: 9.81, h: 2, aspect: 4 / 3, e: 0.8 };
+  const ball = new ThrowBall();
+  const ev = throwRun(ball, p, { vx: 0.6, vy: 2, until: 2.2 });
+  const land = ev.find((e) => e.type === "landed");
+  assert(land && land.bounceHeight > 0.3, "bounces up: " + (land && land.bounceHeight));
+  assert(ball.state === "bouncing" && ball.x > land.x, "still bouncing, further along");
+  // Close a hand on it while it's in the air.
+  const at = { x: ball.x, y: ball.y };
+  let grabbed = null;
+  for (let i = 0, now = 2300; i < 6 && !grabbed; i++, now += 1000 / 60) {
+    const e = ball.update(now, { x: ball.x, y: ball.y, open: i < 2 ? 1 : 0 }, p);
+    if (e && e.type === "grabbed") grabbed = e;
+    else ball.tick(now, p);
+  }
+  assert(grabbed && ball.state === "held", "grabbed mid-bounce, from " + JSON.stringify(at));
+});

@@ -11,7 +11,7 @@ import { $, setStatus, numberIn, onSpace, remember, recall, restoreSettings, bal
 import { loadHandTracker, HandTracker } from "../handtrack.js";
 import { Sounds } from "../sounds.js";
 import { LabLog } from "../lablog.js";
-import { drawCatchScene, plotDrops, fitDropsG, pickMystery, planetName, inkOf, pointerHand } from "../catchview.js";
+import { drawCatchScene, plotDrops, fitDropsG, pickMystery, planetName, inkOf, pointerHand, BOUNCE } from "../catchview.js";
 
 var R = AR.render;
 var SETTINGS = [["catch-view", "catch-view"], ["catch-gravity", "catch-g"], ["catch-slow", "catch-slow"]];
@@ -45,6 +45,7 @@ var Catch = {
       g: g > 0 ? g : 9.81,
       h: numberIn("catch-view", 0.3, 20, 2),
       slow: parseFloat($("catch-slow").value) || 1,
+      e: BOUNCE[(this.ballSkin || {}).style] || 0,
       aspect: this.aspect()
     };
   },
@@ -155,8 +156,11 @@ var Catch = {
       this.drop = null;
       this.status("Great catch! Caught after " + ev.t.toFixed(3) + " s, " + ev.fallenM.toFixed(2) +
         " m down. Open your hand to drop it again.", "ok");
+    } else if (ev.type === "bounce") {
+      Sounds.bounce(ev.speed / 4);
     } else if (ev.type === "landed") {
       Sounds.land();
+      if (ev.bounceHeight > 0.01) Sounds.bounce(1);
       // The exact fall time: screen frames would add up to a frame (~2%),
       // which reads as "g is wrong" rather than teaching anything.
       this.addTrial(ev.h0, ev.exactT);

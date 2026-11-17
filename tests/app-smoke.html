@@ -82,9 +82,13 @@ async function catchTest() {
     await wait(400);
     $("c-touch").click();
     await wait(200);
-    await drop(0.5, 0.35, 0.1);   // 1.80 m
-    await drop(0.5, 0.98, 0.5);   // 1.00 m (pick it up off the floor)
-    await drop(0.5, 0.98, 0.75);  // 0.50 m
+    // Each drop starts from the middle (Ball back): a tennis ball keeps
+    // bouncing for a few seconds after it lands.
+    for (var y1 of [0.1, 0.5, 0.75]) {           // 1.80 m, 1.00 m, 0.50 m
+      $("c-reset").click();
+      await wait(150);
+      await drop(0.5, 0.35, y1);
+    }
     $("c-open-results").click();
     await wait(400);
     var n = +text("c-count"), g = text("c-g"), rows = doc.querySelectorAll("#c-rows tr").length;

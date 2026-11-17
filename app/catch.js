@@ -6,7 +6,7 @@
 import * as AR from "../core/index.js";
 import { Sounds } from "../lab/sounds.js";
 import {
-  drawCatchScene, plotDrops, summarizeDrops, inkOf
+  drawCatchScene, plotDrops, summarizeDrops, inkOf, BOUNCE
 } from "../lab/catchview.js";
 import { store, $, keepAwake } from "./util.js";
 import { makeHandInput } from "./handinput.js";
@@ -49,6 +49,7 @@ export var Catch = {
       g: g > 0 ? g : 9.81,
       h: this.settings.view,
       slow: parseFloat(this.settings.slow) || 1,
+      e: BOUNCE[this.settings.ball] || 0,
       aspect: wrap.clientWidth && wrap.clientHeight ? wrap.clientWidth / wrap.clientHeight : 4 / 3
     };
   },
@@ -151,14 +152,20 @@ export var Catch = {
       this.toast("Great catch! 🙌", "info");
       this.status("Caught after " + ev.t.toFixed(2) + " s, " + ev.fallenM.toFixed(2) +
         " m down. Open your hand to drop it again.", "ok");
+    } else if (ev.type === "bounce") {
+      Sounds.bounce(ev.speed / 4);
     } else if (ev.type === "landed") {
       Sounds.land();
+      if (ev.bounceHeight > 0.01) Sounds.bounce(1);
       // Exact fall time: screen frames would add up to a frame (~2%).
       this.addTrial(ev.h0, ev.exactT);
       this.toast(ev.h0.toFixed(2) + " m in " + ev.exactT.toFixed(3) + " s");
-      this.status(this.trials.length < 3
-        ? "Drop " + this.trials.length + " saved. Pick it up and drop it from a different height."
-        : "Drop " + this.trials.length + " saved. Open Results to see your graph.", "ok");
+      var bounced = ev.bounceHeight > 0.01
+        ? " It bounced back up to " + ev.bounceHeight.toFixed(2) + " m (" + Math.round(ev.bounceHeight / ev.h0 * 100) + "% of the drop)."
+        : "";
+      this.status("Drop " + this.trials.length + " saved." + bounced + (this.trials.length < 3
+        ? " Catch it and drop it from a different height."
+        : " Open Results to see your graph."), "ok");
     }
   },
 

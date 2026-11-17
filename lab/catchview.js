@@ -7,6 +7,11 @@ var R = AR.render;
 
 export var BONES = [[0, 1], [1, 2], [2, 3], [3, 4], [0, 5], [5, 6], [6, 7], [7, 8], [5, 9], [9, 10], [10, 11],
   [11, 12], [9, 13], [13, 14], [14, 15], [15, 16], [13, 17], [0, 17], [17, 18], [18, 19], [19, 20]];
+/* How bouncy each ball is: the share of its speed it keeps when it hits the
+ * floor (coefficient of restitution). Each bounce reaches e² of the height
+ * before: a tennis ball ~55%, a basketball ~70%; a bowling ball just thuds. */
+export var BOUNCE = { tennis: 0.75, basketball: 0.83, bowling: 0, classic: 0.8 };
+
 export var MYSTERY = [3.7, 8.87, 1.62, 3.71, 24.79, 10.44, 8.69, 11.15, 0.62, 2.3, 15.2, 6.1]; // incl. made-up worlds
 export var PLANETS = { 3.7: "Mercury", 8.87: "Venus", 1.62: "the Moon", 3.71: "Mars", 24.79: "Jupiter",
   10.44: "Saturn", 8.69: "Uranus", 11.15: "Neptune", 0.62: "Pluto" };

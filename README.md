@@ -38,7 +38,10 @@ are needed:
   T²-vs-L graph, so changing the string shows what sets the beat and what doesn't.
 
 Every experiment can run on Earth (the real g where you are), the Moon, Mars, Jupiter
-or a mystery planet whose g the child measures, and in slow motion. Earth's g is the real value
+or a mystery planet whose g the child measures, and in slow motion. Dropped and thrown balls
+bounce by their real bounciness (coefficient of restitution: tennis 0.75, so each
+bounce reaches ~56% of the height before; basketball 0.83; a bowling ball just thuds);
+measurements use the first landing, and a ball can be caught mid-bounce. Earth's g is the real value
 **where the child is**: Settings → "Where are you?" takes the device's location (or a
 typed latitude and height) and computes WGS84 normal gravity, from 9.780 m/s² at the
 equator to 9.832 m/s² at the poles (`localGravity` in core/physics.js). Catch & drop's
