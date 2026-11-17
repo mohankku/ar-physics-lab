@@ -21,6 +21,10 @@
                    against the exact formula, g, and g from the T²-vs-L slope
        ?exp=ramp   finger tilts the ramp: wood at 30° rolls (a and t against
                    the physics), ice slides faster, carpet at 2° won't move
+       ?exp=light  finger aims the laser: into water at 45°, out of it at 30°,
+                   trapped at 60°, the mirror, and a mystery material's n
+       ?exp=orbit  finger flicks: circular speed orbits (time = Kepler's third
+                   law), slow crashes, over escape speed escapes; laws card
      Open on a local server: /tests/app-smoke.html?exp=throw
      ?w=390&h=844 for a phone-sized frame. ?headless under headless Chrome,
      which hardly runs animation frames: a 60 Hz timer stands in.
@@ -30,6 +34,8 @@
 <script type="module">
 import { localGravity } from "../core/physics.js";
 import { rampAccel, SURFACES } from "../core/gesture.js";
+import { refract, MATERIALS } from "../core/optics.js";
+import { PLANETS, circularSpeed, escapeSpeed, defaultWarp } from "../core/orbit.js";
 
 var q = new URLSearchParams(location.search);
 var EXP = q.get("exp") || "catch";
@@ -306,6 +312,127 @@ async function rampTest() {
   done(true, "ramp: wood rolls at " + w.a + " m/s², ice slides at " + ice.a + ", carpet holds at 2°");
 }
 
+/* ---------- Light ---------- */
+async function lightTest() {
+  var cv = $("l-canvas"), O = { x: 0.5, y: 0.55 }, at = { x: 0.22, y: 0.2 };
+  var aspect = function() { var r = cv.getBoundingClientRect(); return r.width / r.height; };
+  var spot = function(deg, below) {
+    var a = deg * Math.PI / 180, r = 0.3;
+    return { x: O.x - r * Math.sin(a) / aspect(), y: below ? O.y + r * Math.cos(a) : O.y - r * Math.cos(a) };
+  };
+  /* Pick up the laser, move it to `deg` (above or below the surface), put it down. */
+  async function aim(deg, below) {
+    var to = spot(deg, below);
+    fire(cv, "pointerdown", at.x, at.y);
+    await wait(250);
+    for (var i = 1; i <= 10; i++) fire(cv, "pointermove", at.x + (to.x - at.x) * i / 10, at.y + (to.y - at.y) * i / 10), await wait(20);
+    await wait(400);
+    var live = text("l-status");
+    fire(cv, "pointerup", to.x, to.y);
+    await wait(300);
+    at = to;
+    return live;
+  }
+  function row() {
+    var c = doc.querySelectorAll("#l-rows tr")[0].querySelectorAll("td");
+    return { from: c[2].textContent, inDeg: parseFloat(c[3].textContent), out: c[4].textContent, n: parseFloat(c[5].textContent) };
+  }
+  function material(m) { doc.querySelector('#l-material [data-v="' + m + '"]').click(); }
+  await wait(400);
+  $("l-touch").click();
+  await wait(300);
+  material("water");
+  var said = await aim(45, false), r1 = row();
+  log.push("water from air: " + JSON.stringify(r1) + " | " + said);
+  var exp1 = refract(1, 1.33, r1.inDeg).outDeg;
+  if (Math.abs(r1.inDeg - 45) > 1.5 || Math.abs(parseFloat(r1.out) - exp1) > 1 || !within(r1.n, 1.33, 0.8)) return done(false, "water from air " + JSON.stringify(r1));
+  said = await aim(30, true); var r2 = row();
+  log.push("water from inside: " + JSON.stringify(r2) + " | " + said);
+  if (r2.from !== "water" || Math.abs(parseFloat(r2.out) - refract(1.33, 1, r2.inDeg).outDeg) > 1) return done(false, "from inside " + JSON.stringify(r2));
+  said = await aim(60, true); var r3 = row();
+  log.push("water at 60° from inside: " + JSON.stringify(r3) + " | " + said);
+  if (r3.out !== "trapped" || !/Trapped/.test(said)) return done(false, "should be trapped: " + JSON.stringify(r3));
+  material("mirror");
+  await wait(200);
+  at = { x: 0.22, y: 0.2 };   // the laser came back up: a mirror can't have it underneath
+  said = await aim(35, false); var r4 = row();
+  log.push("mirror: " + JSON.stringify(r4) + " | " + said);
+  if (Math.abs(parseFloat(r4.out) - r4.inDeg) > 0.5) return done(false, "mirror " + JSON.stringify(r4));
+  material("mystery");
+  await wait(200);
+  await aim(50, false); var r5 = row();
+  doc.querySelector("#screen-light .open-results").click();
+  await wait(300);
+  $("l-reveal").click();
+  var truth = parseFloat(text("l-reveal").split("n = ")[1]);
+  log.push("mystery: measured n " + text("l-head") + "; " + text("l-reveal"));
+  if (!within(parseFloat(text("l-head")), truth, 0.8)) return done(false, "mystery n " + text("l-head") + " vs " + truth);
+  if ($("l-plot-wrap").hidden) return done(false, "graph missing");
+  done(true, "light: water bends 45° → " + r1.out + " (n " + r1.n + "), trapped at 60° from inside, mirror in = out, mystery n " + text("l-head") + " = " + truth);
+}
+
+/* ---------- Orbit ---------- */
+async function orbitTest() {
+  var cv = $("o-canvas"), E = PLANETS.earth, C = { x: 0.5, y: 0.52 };
+  var aspect = function() { var r = cv.getBoundingClientRect(); return r.width / r.height; };
+  var H = function() { return 12 * E.R / Math.min(1, aspect()); };
+  var warp = defaultWarp(E);
+  /* Flick the satellite sideways (right) from its start at `speed` m/s. */
+  async function flick(speed) {
+    $("o-reset").click();
+    await wait(150);
+    var x0 = C.x, y0 = C.y - 2.6 * E.R / H();
+    var v = speed * warp / (H() * aspect());              // frame fractions per second
+    fire(cv, "pointerdown", x0, y0);
+    await wait(300);
+    var t0 = performance.now(), steps = 16;
+    for (var i = 1; i <= steps; i++) { await wait(15); fire(cv, "pointermove", x0 + v * (performance.now() - t0) / 1000, y0); }
+    fire(cv, "pointerup", x0 + v * (performance.now() - t0) / 1000, y0);
+  }
+  function row() {
+    var c = doc.querySelectorAll("#o-rows tr")[0].querySelectorAll("td");
+    return { speed: parseFloat(c[3].textContent), esc: parseFloat(c[4].textContent), result: c[5].textContent };
+  }
+  await wait(400);
+  $("o-touch").click();
+  await wait(300);
+  var r0 = 2.62 * E.R;                                     // just past the start point after the flick
+  await flick(circularSpeed(E.GM, r0));
+  await until(function() { return +text("o-count") === 1; }, 20000, "the first orbit");
+  var st = text("o-status"), m = /took (.+?) \(Kepler's third law says (.+?)\)/.exec(st), r1 = row();
+  log.push("circular flick: " + JSON.stringify(r1) + " | " + st);
+  if (!m || m[1] !== m[2]) return done(false, "orbit time vs Kepler: " + st);
+  await flick(1.15 * circularSpeed(E.GM, r0));
+  await until(function() { return +text("o-count") === 2; }, 30000, "the second orbit");
+  log.push("faster flick: " + JSON.stringify(row()) + " | " + text("o-status"));
+  await flick(0.3 * circularSpeed(E.GM, r0));
+  await until(function() { return +text("o-count") === 3; }, 20000, "the slow one to crash");
+  var r3 = row();
+  log.push("slow flick: " + JSON.stringify(r3));
+  if (!/crashed/.test(r3.result)) return done(false, "slow flick should crash: " + JSON.stringify(r3));
+  await flick(1.12 * escapeSpeed(E.GM, r0));
+  await until(function() { return +text("o-count") === 4; }, 30000, "the fast one to escape");
+  var r4 = row();
+  log.push("fast flick: " + JSON.stringify(r4) + " | " + text("o-status"));
+  if (!/escaped/.test(r4.result) || !(r4.speed > r4.esc)) return done(false, "fast flick should escape: " + JSON.stringify(r4));
+  // A fist anywhere picks it up: press far from the satellite, let go without
+  // flicking, and it falls (and crashes) from there.
+  $("o-reset").click();
+  await wait(150);
+  fire(cv, "pointerdown", 0.88, 0.85);
+  await wait(400);
+  fire(cv, "pointerup", 0.88, 0.85);
+  await until(function() { return +text("o-count") === 5; }, 20000, "the far-away grab to fall");
+  log.push("grabbed from afar and dropped: " + JSON.stringify(row()));
+  if (!/crashed/.test(row().result)) return done(false, "far grab: " + JSON.stringify(row()));
+  doc.querySelector("#screen-orbit .open-results").click();
+  await wait(400);
+  if ($("o-plot-wrap").hidden) return done(false, "no Kepler graph");
+  var laws = doc.querySelector('#screen-orbit [data-laws]').textContent;
+  if (!/Kepler's third law/.test(laws) || !/Newton/.test(laws)) return done(false, "laws card missing");
+  done(true, "orbit: circular flick orbits in " + m[1] + " = Kepler; slow crashes; " + r4.speed + " km/s escapes (needs " + r4.esc + "); a press anywhere grabs it");
+}
+
 /* Headless: one shared tick runs the app's animation callbacks. */
 var tickers = [], tickTimer = 0;
 function headlessTick() {
@@ -329,7 +456,7 @@ frame.onload = function() {
     };
     win.cancelAnimationFrame = function(id) { if (byId[id]) byId[id].cancelled = true; delete byId[id]; };
   }
-  var run = { "catch": catchTest, "throw": throwTest, "swing": swingTest, "ramp": rampTest }[EXP];
+  var run = { "catch": catchTest, "throw": throwTest, "swing": swingTest, "ramp": rampTest, "light": lightTest, "orbit": orbitTest }[EXP];
   wait(300).then(run).catch(function(e) { done(false, String(e && e.message || e)); });
 };
 </script>

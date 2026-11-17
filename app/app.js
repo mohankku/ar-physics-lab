@@ -5,13 +5,18 @@ import { Catch } from "./catch.js";
 import { Throw } from "./throw.js";
 import { Swing } from "./swing.js";
 import { Ramp } from "./ramp.js";
+import { Light } from "./light.js";
+import { Orbit } from "./orbit.js";
+import { renderLaws } from "./laws.js";
 
 var SCREENS = {
   "": { el: "screen-home", title: "Physics Lab" },
   "catch": { el: "screen-catch", title: "Catch & drop · Physics Lab", exp: Catch },
   "throw": { el: "screen-throw", title: "Throw · Physics Lab", exp: Throw },
   "swing": { el: "screen-swing", title: "Swing · Physics Lab", exp: Swing },
-  "ramp": { el: "screen-ramp", title: "Ramp · Physics Lab", exp: Ramp }
+  "ramp": { el: "screen-ramp", title: "Ramp · Physics Lab", exp: Ramp },
+  "light": { el: "screen-light", title: "Light · Physics Lab", exp: Light },
+  "orbit": { el: "screen-orbit", title: "Orbit · Physics Lab", exp: Orbit }
 };
 var current = null;
 
@@ -55,6 +60,9 @@ Catch.init();
 Throw.init();
 Swing.init();
 Ramp.init();
+Light.init();
+Orbit.init();
+renderLaws();
 initInstall();
 initOffline();
 window.addEventListener("hashchange", route);

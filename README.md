@@ -44,6 +44,26 @@ are needed:
   can't grip, so it slides instead (faster); carpet holds it still on a gentle slope
   (core RampBall, rampAccel, SURFACES).
 
+- **Light**: hold a laser in your fist; it always aims at one point on the surface, so
+  where you hold it sets the angle. A mirror bounces it at the same angle; water,
+  glass and diamond bend it (Snell's law) and reflect a share that grows at grazing
+  angles (Fresnel). From under the surface, past the critical angle, it's trapped:
+  total internal reflection, as in optical fibers. Each placement saves a reading; the
+  child measures n and can identify a mystery material (core/optics.js).
+
+- **Orbit**: pinch a satellite (thumb and index finger; a pinch anywhere picks it up)
+  and swing it around a real planet (Earth, the Moon, Mars, Jupiter),
+  time sped up so an orbit takes seconds. Newton's gravity is integrated step by step
+  (core/orbit.js); too slow and it crashes, past escape speed it leaves, in between it
+  orbits. The dashed ellipse has the planet at a focus (Kepler 1), equal-time slices
+  have equal areas (Kepler 2), and each orbit's time lands on a T²-vs-a³ line
+  (Kepler 3). Speeds are real: 7.9 km/s to orbit Earth low, 11.2 km/s to escape.
+
+Each experiment's Results end with **the laws behind it**: who found them, when, the
+law in plain words, the formula, and what the child saw that shows it (Galileo,
+Newton, Huygens, Amontons, Euclid, Ibn Sahl and Snell, Kepler; `app/laws.js`), and its
+start card names them. Naming the scientists helps kids remember the ideas.
+
 Every experiment can run on Earth (the real g where you are), the Moon, Mars, Jupiter
 or a mystery planet whose g the child measures, and in slow motion. Dropped and thrown balls
 bounce by their real bounciness (coefficient of restitution: tennis 0.75, so each
@@ -75,6 +95,9 @@ app/                the app (PWA): open app/
   throw.js            Throw (core ThrowBall): flight arrows, distance, angle graph
   swing.js            Swing (core SwingBall): timed swings, runs table, T²-vs-L graph
   ramp.js             Ramp (core RampBall): tilt by hand, surfaces, d-vs-t² and a-vs-angle graphs
+  light.js            Light (core optics.js): laser, mirror, refraction, total internal reflection
+  orbit.js            Orbit (core orbit.js): flick a satellite; Kepler's three laws on screen
+  laws.js             the scientists and laws behind each experiment
   handinput.js        the hand: camera hand tracking or finger/mouse, for every screen
   worlds.js           Earth (local g) / Moon / Mars / Jupiter / mystery planet
   camera.js           the one shared camera
@@ -102,6 +125,8 @@ core/               AR engine (ES modules, no dependencies)
                         CatchBall (drop), ThrowBall (throw), SwingBall (pendulum),
                         RampBall (Galileo's ramp)
   models.js           engineering models for the workbench: simulateFall (quadratic air drag)
+  optics.js           refraction (Snell), Fresnel reflection, critical angle, LaserPointer
+  orbit.js            real planets, Newton's gravity (RK4), orbit elements, Satellite
   render.js           canvas drawing: realistic balls, overlays, result plots
 lab/                the experiment page
   lab.html            markup (an HTML fragment)
@@ -195,6 +220,10 @@ They play the app the way a child would and check the Results panel:
 - **throw**: two finger flicks at different angles: the ball must leave at the
   finger's speed (±6%) and angle (±6°) and reach the right height; then a throw on
   the mystery planet, whose measured g must match the revealed answer.
+- **orbit**: finger flicks: circular speed orbits (its time must equal Kepler's third
+  law), a faster one too, slow crashes, over escape speed escapes; laws card shown.
+- **light**: the finger aims the laser: into water at 45°, out of it at 30°, trapped at
+  60°, the mirror, and a mystery material's n.
 - **ramp**: the finger tilts the ramp: wood at 30° rolls (a and t against the physics),
   ice slides faster, carpet at 2° won't move.
 - **swing**: the finger pulls the pendulum aside and lets go: 80 cm (period vs the

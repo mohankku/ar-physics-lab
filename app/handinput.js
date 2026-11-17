@@ -3,7 +3,8 @@
  * The camera fills the stage (object-fit: cover), so landmarks are mapped
  * from video coordinates to stage fractions, flipped when mirrored.
  *
- *   var input = makeHandInput({wrap, video, canvas}, {mirror: fn, back: fn, status: fn})
+ *   var input = makeHandInput({wrap, video, canvas}, {mirror: fn, back: fn, status: fn,
+ *     grip: "fist" (default: open hand / fist) | "pinch" (thumb and index finger)})
  *   input.startCamera() / input.startTouch() → Promise; input.stop()
  *   each animation frame: var r = input.read(now)  → {hand, fresh}
  *     hand: {x, y, open (0 fist..1 open), lm (21 points) | null} or null
@@ -96,6 +97,11 @@ export function makeHandInput(els, opts) {
         var x = flip ? 1 - q.x : q.x;
         return { x: (x * dw - ox) / SW, y: (q.y * dh - oy) / SH };
       });
+      // grip "pinch": thumb and index finger; the hand is where they meet.
+      if (opts.grip === "pinch") {
+        var q = AR.pinchPoint(shown);
+        return { x: q.x, y: q.y, open: AR.pinchOpenness(lm, VW / VH), lm: shown, pinch: true };
+      }
       var c = AR.palmCenter(shown);
       return { x: c.x, y: c.y, open: AR.handOpenness(lm, VW / VH), lm: shown };
     }

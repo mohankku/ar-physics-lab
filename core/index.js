@@ -20,8 +20,12 @@ export { analyzeFall, cleanSamples, frameRate } from "./analysis.js";
 export { analyzeProjectile, projectilePath } from "./projectile.js";
 export { analyzePendulum, pendulumModel, periodFactor } from "./pendulum.js";
 export { simulateFall, AIR_DENSITY, DRAG_COEFFICIENTS } from "./models.js";
+export { MATERIALS, refract, criticalAngle, indexFrom, LaserPointer } from "./optics.js";
 export {
-  handOpenness, palmCenter, GestureGate, CatchBall, ThrowBall, SwingBall, RampBall, rampAccel, SURFACES
+  PLANETS, circularSpeed, escapeSpeed, keplerPeriod, orbitElements, defaultWarp, Satellite
+} from "./orbit.js";
+export {
+  handOpenness, palmCenter, pinchOpenness, pinchPoint, GestureGate, fitHandVelocity, CatchBall, ThrowBall, SwingBall, RampBall, rampAccel, SURFACES
 } from "./gesture.js";
 export {
   resolveScale, scaleFromBallWidths, scaleFromPoints, clientToCamera, BALL_DIAMETERS

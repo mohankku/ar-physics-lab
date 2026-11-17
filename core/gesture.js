@@ -33,6 +33,32 @@ export function handOpenness(lm, aspect = 1) {
   return sum / FINGERS.length;
 }
 
+const PINCHED = 0.2;   // thumb-tip-to-index-tip gap / palm length: touching
+const APART = 0.6;     // … and clearly apart
+
+/**
+ * How open a pinch is, 0 (thumb and index fingertips touching) to 1
+ * (apart). Measured against the palm's length (wrist to index knuckle), so
+ * it works near or far from the camera. Same scale as handOpenness, so a
+ * GestureGate turns it into grab / release.
+ * @param {Landmark[]} lm  21 landmarks
+ * @param {number} [aspect=1]  frame width / height
+ */
+export function pinchOpenness(lm, aspect = 1) {
+  if (!lm || lm.length < 21) return NaN;
+  const d = (a, b) => Math.hypot((lm[a].x - lm[b].x) * aspect, lm[a].y - lm[b].y);
+  // A thumb tucked against the side of the index finger (by its middle
+  // joint) isn't a pinch: in a pinch the thumb meets the fingertip.
+  if (d(4, 6) < d(4, 8)) return 1;
+  const r = d(4, 8) / Math.max(1e-9, d(0, 5));
+  return Math.min(1, Math.max(0, (r - PINCHED) / (APART - PINCHED)));
+}
+
+/** Where the pinch is: halfway between the thumb tip and the index fingertip. */
+export function pinchPoint(lm) {
+  return { x: (lm[4].x + lm[8].x) / 2, y: (lm[4].y + lm[8].y) / 2 };
+}
+
 /** Palm center (frame fractions): wrist and the four knuckles. */
 export function palmCenter(lm) {
   let x = 0, y = 0;
@@ -265,6 +291,23 @@ export class CatchBall {
 }
 
 const THROW_WINDOW_MS = 110; // hand velocity at release: fit over this much history
+
+/**
+ * How fast a hand was moving: a straight-line fit of its positions over the
+ * last `windowMs` before `now`. hist: [{t (ms), x, y}] in frame fractions.
+ * @returns {{x: number, y: number}} frame fractions per second (y down);
+ *   zero with too little history (under 20 ms of it)
+ */
+export function fitHandVelocity(hist, now, windowMs = THROW_WINDOW_MS) {
+  const pts = hist.filter((q) => q.t >= now - windowMs);
+  if (pts.length < 2 || pts[pts.length - 1].t - pts[0].t < 20) return { x: 0, y: 0 };
+  let st = 0, sx = 0, sy = 0;
+  for (const q of pts) { st += q.t; sx += q.x; sy += q.y; }
+  const n = pts.length, mt = st / n, mx = sx / n, my = sy / n;
+  let stt = 0, stx = 0, sty = 0;
+  for (const q of pts) { const d = q.t - mt; stt += d * d; stx += d * (q.x - mx); sty += d * (q.y - my); }
+  return { x: stx / stt * 1000, y: sty / stt * 1000 };
+}
 const MAX_THROW = 15;        // m/s: faster is a tracking glitch, not a throw
 
 /**
@@ -362,14 +405,8 @@ export class ThrowBall {
   /** Hand velocity (m/s, vy up) over the last THROW_WINDOW_MS before `now`. */
   handVelocity(now, p) {
     const aspect = p.aspect || 4 / 3;
-    const pts = this._hist.filter((q) => q.t >= now - THROW_WINDOW_MS);
-    if (pts.length < 2 || pts[pts.length - 1].t - pts[0].t < 20) return { vx: 0, vy: 0 };
-    let st = 0, sx = 0, sy = 0;
-    for (const q of pts) { st += q.t; sx += q.x; sy += q.y; }
-    const n = pts.length, mt = st / n, mx = sx / n, my = sy / n;
-    let stt = 0, stx = 0, sty = 0;
-    for (const q of pts) { const d = q.t - mt; stt += d * d; stx += d * (q.x - mx); sty += d * (q.y - my); }
-    let vx = stx / stt * 1000 * p.h * aspect, vy = -sty / stt * 1000 * p.h;
+    const f = fitHandVelocity(this._hist, now);
+    let vx = f.x * p.h * aspect, vy = -f.y * p.h;
     const s = Math.hypot(vx, vy);
     if (s > MAX_THROW) { vx *= MAX_THROW / s; vy *= MAX_THROW / s; }
     return { vx, vy };

@@ -219,6 +219,19 @@ a { color: var(--accent); }
 .dock-seg button { min-height: 40px; background: rgba(255, 255, 255, 0.08); border-color: rgba(255, 255, 255, 0.16); color: #fff; }
 .dock-seg button[aria-checked="true"] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 35%, transparent); }
 .art-ramp { background: linear-gradient(160deg, #7c3aed, #0ea5e9); }
+.art-light { background: linear-gradient(160deg, #0f172a, #1e3a8a); }
+.art-light svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.art-orbit { background: radial-gradient(ellipse at 40% 50%, #1e293b, #020617); }
+.art-orbit svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.laws { display: grid; gap: 10px; margin-top: 6px; }
+.laws h3 { margin: 4px 0 0; font-size: 17px; }
+.law { background: var(--surface-2); border-radius: 14px; padding: 12px 14px; display: grid; gap: 4px; }
+.law b { font-size: 16px; }
+.law small { color: var(--muted); font-size: 13px; }
+.law p { margin: 2px 0; }
+.law code { justify-self: start; font-size: 15px; padding: 3px 8px; border-radius: 8px; background: var(--surface); border: 1px solid var(--line); }
+.law .seen { color: var(--muted); font-size: 14px; }
+.start-card .law-line { color: #fde68a; font-size: 14px; margin-top: 10px; }
 .art-ramp svg { position: absolute; inset: 8px 0 0; width: 100%; height: calc(100% - 8px); }
 .count { min-width: 24px; padding: 1px 7px; border-radius: 999px; background: rgba(255, 255, 255, 0.25); font-size: 14px; }
 

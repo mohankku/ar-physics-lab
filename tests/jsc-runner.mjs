@@ -3,7 +3,7 @@
  * The harness takes "window" to mean "browser": it then queues tests for
  * runAll() instead of loading node:test. */
 globalThis.window = globalThis.window || {};
-const FILES = ["physics", "analysis", "projectile", "pendulum", "models", "gesture", "catchview", "bench-scene", "vision",
+const FILES = ["physics", "analysis", "projectile", "pendulum", "models", "gesture", "optics", "orbit", "catchview", "bench-scene", "vision",
   "sim", "trigger", "replay", "framebuffer", "calibration"];
 const { runAll } = await import("./harness.js");
 for (const f of FILES) await import(`./${f}.test.js`);

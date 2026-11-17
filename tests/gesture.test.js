@@ -1,5 +1,5 @@
 import { test, assert, near } from "./harness.js";
-import { handOpenness, palmCenter, GestureGate, CatchBall, ThrowBall, SwingBall, RampBall, rampAccel, SURFACES } from "../core/gesture.js";
+import { handOpenness, palmCenter, pinchOpenness, pinchPoint, GestureGate, CatchBall, ThrowBall, SwingBall, RampBall, rampAccel, SURFACES } from "../core/gesture.js";
 import { periodFactor } from "../core/pendulum.js";
 
 /* A synthetic right hand, fingers up, palm at (cx, cy) frame fractions.
@@ -371,4 +371,20 @@ test("RampBall: on carpet a gentle slope won't start; slow motion keeps physics 
   const a = rampRun(new RampBall(), { ...p, surface: SURFACES.wood }, 25, 4).events.find((e) => e.type === "done");
   const b = rampRun(new RampBall(), { ...p, surface: SURFACES.wood, slow: 0.25 }, 25, 12).events.find((e) => e.type === "done");
   near(a.t, b.t, 1e-9, "same roll time in slow motion");
+});
+
+test("pinchOpenness: thumb and index together ≈ 0, apart ≈ 1, any size; pinchPoint between them", () => {
+  for (const [cx, cy, size] of [[0.5, 0.6, 0.1], [0.3, 0.4, 0.05], [0.7, 0.5, 0.2]]) {
+    const open = hand(cx, cy, 0, size);
+    assert(pinchOpenness(open) > 0.9, "apart: " + pinchOpenness(open));
+    const pinched = hand(cx, cy, 0, size);
+    pinched[4] = { x: pinched[8].x + 0.05 * size, y: pinched[8].y + 0.05 * size };   // thumb tip on the index tip
+    assert(pinchOpenness(pinched) < 0.1, "pinched: " + pinchOpenness(pinched));
+    const q = pinchPoint(pinched);
+    assert(Math.hypot(q.x - pinched[8].x, q.y - pinched[8].y) < 0.05 * size, "at the fingertips");
+  }
+  const tucked = hand(0.5, 0.6, 0, 0.1);
+  tucked[4] = { x: tucked[6].x - 0.004, y: tucked[6].y + 0.004 };   // thumb against the finger's middle joint
+  assert(pinchOpenness(tucked) === 1, "a tucked thumb isn't a pinch: " + pinchOpenness(tucked));
+  assert(isNaN(pinchOpenness([])), "no landmarks");
 });
