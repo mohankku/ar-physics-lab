@@ -2,10 +2,14 @@
  * One experiment screen at a time; leaving it turns the camera off. */
 import { $ } from "./util.js";
 import { Catch } from "./catch.js";
+import { Throw } from "./throw.js";
+import { Swing } from "./swing.js";
 
 var SCREENS = {
   "": { el: "screen-home", title: "Physics Lab" },
-  "catch": { el: "screen-catch", title: "Catch & drop · Physics Lab", exp: Catch }
+  "catch": { el: "screen-catch", title: "Catch & drop · Physics Lab", exp: Catch },
+  "throw": { el: "screen-throw", title: "Throw · Physics Lab", exp: Throw },
+  "swing": { el: "screen-swing", title: "Swing · Physics Lab", exp: Swing }
 };
 var current = null;
 
@@ -46,6 +50,8 @@ function initOffline() {
 }
 
 Catch.init();
+Throw.init();
+Swing.init();
 initInstall();
 initOffline();
 window.addEventListener("hashchange", route);

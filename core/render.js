@@ -292,8 +292,9 @@ function curve(ctx, dims, n, at, color, dash) {
 
 /* Projectile results: the arc (height vs distance) and the two velocity
  * components vs time — vx stays flat, vy falls at slope −g.
- * res: a successful analyzeProjectile() result. */
-export function drawProjectilePlot(ctx, dims, res) {
+ * res: a successful analyzeProjectile() result. ink: optional "r,g,b" for
+ * axes and labels (default black), to follow a dark theme. */
+export function drawProjectilePlot(ctx, dims, res, ink) {
   ctx.clearRect(0, 0, dims.w, dims.h);
   var half = Math.floor(dims.w / 2), dir = res.vx < 0 ? -1 : 1, o = res.origin;
   var pts = res.points;
@@ -302,7 +303,7 @@ export function drawProjectilePlot(ctx, dims, res) {
   var rise = function(p) { return o.y - p.y; };
   var xr = range(pts.map(dist)), yr = range(pts.map(rise));
   var A = chartFrame(ctx, dims, { x: 0, y: 0, w: half - 8 * dims.dpr, h: dims.h }, xr, yr,
-    ["distance (m)", "height (m)"]);
+    ["distance (m)", "height (m)"], ink);
   curve(ctx, dims, 48, function(f) {
     var t = res.span * f;
     return [A.X(Math.abs(res.vx) * t), A.Y(res.vy * t - 0.5 * res.g * t * t)];
@@ -319,7 +320,7 @@ export function drawProjectilePlot(ctx, dims, res) {
   var vr = range(vxs.concat(vys).map(function(p) { return p[1]; })
     .concat([res.vy, res.vy - res.g * res.span, Math.abs(res.vx), 0]));
   var B = chartFrame(ctx, dims, { x: half, y: 0, w: dims.w - half, h: dims.h }, [0, res.span], vr,
-    ["t (s)", "velocity (m/s)"]);
+    ["t (s)", "velocity (m/s)"], ink);
   curve(ctx, dims, 2, function(f) { return [B.X(res.span * f), B.Y(Math.abs(res.vx))]; }, "#0e9f8f");
   curve(ctx, dims, 2, function(f) {
     var t = res.span * f; return [B.X(t), B.Y(res.vy - res.g * t)];
@@ -334,19 +335,20 @@ export function drawProjectilePlot(ctx, dims, res) {
 /* Pendulum results: displacement vs time with the fitted damped swing and
  * a tick at each center crossing used. unit: frame heights → display unit
  * ({k, label}), e.g. {k: 150, label: "cm"} when the frame is 1.5 m tall.
- * res: a successful analyzePendulum() result. model(t): fitted displacement. */
-export function drawPendulumPlot(ctx, dims, res, model, unit) {
+ * res: a successful analyzePendulum() result. model(t): fitted displacement.
+ * ink: optional "r,g,b" for axes and labels (default black). */
+export function drawPendulumPlot(ctx, dims, res, model, unit, ink) {
   ctx.clearRect(0, 0, dims.w, dims.h);
   var k = unit.k, ser = res.series, tEnd = ser[ser.length - 1].t;
   var yr = range(ser.map(function(p) { return p.s * k; }), 0.1);
   var A = chartFrame(ctx, dims, { x: 0, y: 0, w: dims.w, h: dims.h }, [0, tEnd], yr,
-    ["t (s)", "displacement (" + unit.label + ")"]);
+    ["t (s)", "displacement (" + unit.label + ")"], ink);
   var t1 = res.crossings[0].t, t2 = res.crossings[res.crossings.length - 1].t;
   curve(ctx, dims, Math.max(60, Math.round((t2 - t1) * 40)), function(f) {
     var t = t1 + (t2 - t1) * f; return [A.X(t), A.Y(model(t) * k)];
   }, "#1a56db");
   dots(ctx, dims, ser.map(function(p) { return [A.X(p.t), A.Y(p.s * k)]; }), "rgba(229,72,77,0.8)");
-  ctx.strokeStyle = "rgba(15,32,39,0.55)";
+  ctx.strokeStyle = "rgba(" + (ink || "15,32,39") + ",0.55)";
   ctx.lineWidth = dims.dpr;
   res.crossings.forEach(function(c) {
     var x = A.X(c.t);

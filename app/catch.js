@@ -9,26 +9,17 @@ import { Sounds } from "../lab/sounds.js";
 import {
   drawCatchScene, plotDrops, summarizeDrops, pickMystery, planetName, inkOf, pointerHand
 } from "../lab/catchview.js";
-import { store, $ } from "./util.js";
+import { store, $, keepAwake } from "./util.js";
+import { startCamera, stopCamera, cameraError } from "./camera.js";
+import { makePanels } from "./panels.js";
 
 var R = AR.render;
 var MAX_TRIALS = 50;
 var NO_HAND_HINT_MS = 2500;
 var WORLDS = { "9.81": "Earth", "1.62": "Moon", "3.71": "Mars", "24.79": "Jupiter", "mystery": "Mystery planet" };
 
-function cameraConstraints(back) {
-  return {
-    audio: false,
-    video: {
-      facingMode: { ideal: back ? "environment" : "user" },
-      width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 30 }
-    }
-  };
-}
-
 export var Catch = {
   ball: new AR.CatchBall(),
-  camera: null,
   tracker: null,
   source: null,         // "camera" | "touch" while running
   live: false, raf: 0, clock: null,
@@ -38,7 +29,6 @@ export var Catch = {
   settings: null,
   mysteryG: null, revealed: false,
   skin: null,
-  wakeLock: null,
 
   /* ---------- settings ---------- */
   loadSettings: function() {
@@ -87,26 +77,25 @@ export var Catch = {
     btn.disabled = true;
     $("c-start-note").textContent = "Loading the hand tracker… (about 18 MB the first time, then it's saved)";
     self.status("Starting the camera…", "");
-    self.camera = self.camera || new AR.Camera({ constraints: cameraConstraints(self.settings.back) });
-    Promise.all([loadHandTracker(), self.camera.start($("c-video"))]).then(function(r) {
+    var cam = startCamera($("c-video"), self.settings.back).catch(function(e) {
+      throw { camera: true, err: e };
+    });
+    Promise.all([loadHandTracker(), cam]).then(function(r) {
       self.tracker = new HandTracker(r[0]);
       self.run("camera");
       self.status("Show your open hand ✋, then make a fist ✊ on the ball.", "ok");
     }, function(err) {
-      if (err && err.name === "AbortError") return;
-      var name = err && err.name;
-      var msg = name === "NotAllowedError" ? "The camera is blocked. Allow it in the browser settings, or use your finger."
-        : name === "NotFoundError" ? "No camera found. Use your finger or the mouse instead."
-        : name === "NoCameraApi" ? "This browser can't use the camera. Use your finger or the mouse instead."
-        : "The hand tracker couldn't load (check the internet). Use your finger or the mouse instead.";
-      if (self.camera) self.camera.stopAll();
+      if (err && err.camera && err.err && err.err.name === "AbortError") return;
+      var msg = (err && err.camera ? cameraError(err.err) : "The hand tracker couldn't load (check the internet).") +
+        " You can use your finger or the mouse instead.";
+      stopCamera();
       self.status(msg, "err");
       $("c-start-note").textContent = msg;
     }).then(function() { btn.disabled = false; });
   },
   startTouch: function() {
     Sounds.unlock();
-    if (this.camera) this.camera.stopAll();
+    stopCamera();
     this.run("touch");
     this.status("Press and hold on the ball to catch it, slide up, then let go.", "ok");
   },
@@ -124,7 +113,7 @@ export var Catch = {
       self.clock = new AR.FrameClock($("c-video"));
       self.clock.start();
     }
-    self.keepAwake(true);
+    keepAwake(true);
     self.raf = requestAnimationFrame(function(n) { self.loop(n); });
   },
   stop: function() {
@@ -135,32 +124,18 @@ export var Catch = {
     this.clock = null;
     this.source = null;
     $("c-wrap").classList.remove("touch-play", "pressing");
-    this.keepAwake(false);
+    keepAwake(false);
   },
   /* Back to the start card: camera off, loop stopped. */
   leave: function() {
     this.stop();
-    if (this.camera) this.camera.stopAll();
+    stopCamera();
     $("c-start").hidden = false;
     $("c-start-note").textContent = "The first time, the hand tracker downloads (about 18 MB). Video never leaves this device.";
     this.status("Pick camera or finger to start.", "");
-    this.closePanels();
+    this.panels.closeSheets();
     this.drawIdle();
   },
-  /* Keep the screen on while playing (tablets dim after ~30 s untouched). */
-  keepAwake: function(on) {
-    var self = this;
-    if (!on) {
-      if (self.wakeLock) self.wakeLock.release().catch(function() {});
-      self.wakeLock = null;
-      return;
-    }
-    if (self.wakeLock || !navigator.wakeLock) return;
-    navigator.wakeLock.request("screen").then(function(lock) {
-      if (self.live) self.wakeLock = lock; else lock.release();
-    }, function() {});
-  },
-
   /* ---------- the loop ---------- */
   loop: function(now) {
     var self = this;
@@ -300,36 +275,6 @@ export var Catch = {
     $("c-world").textContent = this.mystery() ? "Mystery planet · g = ?" : WORLDS[g] + " · g = " + g + " m/s²";
   },
 
-  /* ---------- panels ---------- */
-  wide: function() { return matchMedia("(min-width: 960px) and (min-height: 521px)").matches; },
-  openPanel: function(id) {
-    var self = this;
-    if (id === "c-results" && self.wide()) {
-      $("screen-catch").classList.add("results-open");
-      store.set("resultsOpen", true);
-      requestAnimationFrame(function() { self.renderResults(); });
-      return;
-    }
-    self.closePanels();
-    $(id).classList.add("open");
-    $("c-scrim").hidden = false;
-    if (id === "c-results") requestAnimationFrame(function() { self.renderResults(); });
-  },
-  /* Close the sliding sheets (the wide-screen results column stays). */
-  closePanels: function() {
-    ["c-results", "c-settings"].forEach(function(id) { $(id).classList.remove("open"); });
-    $("c-scrim").hidden = true;
-  },
-  closePanel: function(panel) {
-    if (panel.id === "c-results" && this.wide()) {
-      $("screen-catch").classList.remove("results-open");
-      store.set("resultsOpen", false);
-      return;
-    }
-    panel.classList.remove("open");
-    $("c-scrim").hidden = true;
-  },
-
   /* ---------- setup ---------- */
   initSettings: function() {
     var self = this, s = self.settings;
@@ -385,8 +330,7 @@ export var Catch = {
       // The facing camera is mirrored, the back camera isn't.
       s.mirror = !s.back; $("c-mirror").checked = s.mirror; applyMirror(); self.saveSettings();
       var wasLive = self.source === "camera";
-      if (self.camera) self.camera.stopAll();
-      self.camera = null;
+      stopCamera();
       if (wasLive) self.startCamera();
     });
   },
@@ -438,15 +382,9 @@ export var Catch = {
     });
     $("c-clear").addEventListener("click", function() { self.trials = []; self.renderResults(); });
     $("c-reveal").addEventListener("click", function() { self.revealed = true; self.renderResults(); });
-    $("c-open-results").addEventListener("click", function() { self.openPanel("c-results"); });
-    $("c-open-settings").addEventListener("click", function() { self.openPanel("c-settings"); });
-    $("c-scrim").addEventListener("click", function() { self.closePanels(); });
-    document.querySelectorAll("#screen-catch [data-close]").forEach(function(btn) {
-      btn.addEventListener("click", function() { self.closePanel(btn.closest(".panel")); });
-    });
+    self.panels = makePanels($("screen-catch"), "catch", function() { self.renderResults(); });
     document.addEventListener("keydown", function(e) {
       if ($("screen-catch").hidden) return;
-      if (e.key === "Escape") { self.closePanels(); return; }
       var tag = (document.activeElement && document.activeElement.tagName) || "";
       if (e.code !== "Space" || tag === "INPUT" || tag === "BUTTON" || tag === "A") return;
       e.preventDefault();
@@ -456,10 +394,6 @@ export var Catch = {
       if (!self.live && !$("screen-catch").hidden) self.drawIdle();
       self.plot(NaN);
     });
-    document.addEventListener("visibilitychange", function() {
-      if (document.visibilityState === "visible" && self.live) self.keepAwake(true);
-    });
-    if (store.get("resultsOpen", true)) $("screen-catch").classList.add("results-open");
     self.renderResults();
   },
   /* Called when the screen is shown. */

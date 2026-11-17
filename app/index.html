@@ -54,22 +54,31 @@
           <span class="card-go">Start</span>
         </div>
       </a>
-      <div class="card card-soon" aria-disabled="true">
-        <div class="card-art art-throw" aria-hidden="true"><span class="art-arc"></span></div>
-        <div class="card-body">
-          <span class="card-tag"><svg class="ic"><use href="#i-lock"/></svg> Coming next</span>
-          <h2>Throw</h2>
-          <p>Throw a ball and see its path split into across and up-and-down.</p>
+      <a class="card card-live" href="#/throw">
+        <div class="card-art art-throw" aria-hidden="true">
+          <svg viewBox="0 0 300 140" preserveAspectRatio="xMidYMax meet">
+            <path id="throw-arc" d="M40 128 Q150 -44 260 128" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="3" stroke-dasharray="7 7"/>
+            <circle r="12" fill="#ffd1d1" stroke="#e5484d" stroke-width="6">
+              <animateMotion dur="2.4s" repeatCount="indefinite" keyPoints="0;0;1;1" keyTimes="0;0.1;0.8;1" calcMode="linear"><mpath href="#throw-arc"/></animateMotion>
+            </circle>
+          </svg>
         </div>
-      </div>
-      <div class="card card-soon" aria-disabled="true">
+        <div class="card-body">
+          <span class="card-tag">Experiment 2 · Motion</span>
+          <h2>Throw</h2>
+          <p>Throw a real ball across the camera. See its path split into across and up-and-down, and measure g.</p>
+          <span class="card-go">Start</span>
+        </div>
+      </a>
+      <a class="card card-live" href="#/swing">
         <div class="card-art art-swing" aria-hidden="true"><span class="art-string"></span></div>
         <div class="card-body">
-          <span class="card-tag"><svg class="ic"><use href="#i-lock"/></svg> Coming next</span>
+          <span class="card-tag">Experiment 3 · Rhythm</span>
           <h2>Swing</h2>
-          <p>Time a pendulum and discover what does, and doesn't, change its beat.</p>
+          <p>Time a real ball on a string. Discover what changes its beat, and what doesn't, and measure g.</p>
+          <span class="card-go">Start</span>
         </div>
-      </div>
+      </a>
     </main>
 
     <footer class="home-foot">
@@ -87,7 +96,7 @@
         <div class="topbar">
           <a class="round-btn" href="#/" aria-label="Back to experiments"><svg class="ic"><use href="#i-back"/></svg></a>
           <div class="topbar-title"><span>Catch &amp; drop</span><small id="c-world">Earth · g = 9.81 m/s²</small></div>
-          <button class="round-btn" id="c-open-settings" type="button" aria-label="Settings"><svg class="ic"><use href="#i-gear"/></svg></button>
+          <button class="round-btn" id="c-open-settings" data-open="settings" type="button" aria-label="Settings"><svg class="ic"><use href="#i-gear"/></svg></button>
         </div>
 
         <div class="toast" id="c-toast" aria-live="polite"></div>
@@ -115,13 +124,13 @@
         </div>
         <div class="dock-btns">
           <button class="pill-btn" id="c-reset" type="button" title="Ball back to the middle (Space)"><svg class="ic"><use href="#i-reset"/></svg> Ball back</button>
-          <button class="pill-btn accent" id="c-open-results" type="button"><svg class="ic"><use href="#i-chart"/></svg> Results <span class="count" id="c-count">0</span></button>
+          <button class="pill-btn accent open-results" id="c-open-results" data-open="results" type="button"><svg class="ic"><use href="#i-chart"/></svg> Results <span class="count" id="c-count">0</span></button>
         </div>
       </div>
     </div>
 
     <!-- Results: side panel on wide screens, bottom sheet on narrow ones -->
-    <aside class="panel" id="c-results" aria-label="Results">
+    <aside class="panel results" id="c-results" aria-label="Results">
       <div class="panel-head">
         <h2>Results</h2>
         <button class="round-btn flat" data-close type="button" aria-label="Close results"><svg class="ic"><use href="#i-close"/></svg></button>
@@ -151,7 +160,7 @@
     </aside>
 
     <!-- Settings sheet -->
-    <aside class="panel sheet-settings" id="c-settings" aria-label="Settings">
+    <aside class="panel settings" id="c-settings" aria-label="Settings">
       <div class="panel-head">
         <h2>Settings</h2>
         <button class="round-btn flat" data-close type="button" aria-label="Close settings"><svg class="ic"><use href="#i-close"/></svg></button>
@@ -202,6 +211,224 @@
       </div>
     </aside>
     <div class="scrim" id="c-scrim" hidden></div>
+  </section>
+
+  <!-- ============ Experiment 2: Throw ============ -->
+  <section class="screen exp" id="screen-throw" aria-label="Throw" hidden>
+    <div class="exp-main">
+      <div class="stage-wrap fit" id="t-wrap">
+        <div class="frame" id="t-frame">
+          <video id="t-video" autoplay muted playsinline></video>
+          <canvas id="t-canvas" aria-label="Camera picture: tap the ball to pick its color"></canvas>
+        </div>
+
+        <div class="topbar">
+          <a class="round-btn" href="#/" aria-label="Back to experiments"><svg class="ic"><use href="#i-back"/></svg></a>
+          <div class="topbar-title"><span>Throw</span><small>Measure g from a throw</small></div>
+          <button class="round-btn" data-open="settings" type="button" aria-label="Settings"><svg class="ic"><use href="#i-gear"/></svg></button>
+        </div>
+
+        <div class="toast" id="t-toast" aria-live="polite"></div>
+
+        <div class="start-card" id="t-start">
+          <h2>Throw</h2>
+          <ol class="steps">
+            <li><span>📱</span>Stand the device up, looking across the room at a plain wall</li>
+            <li><span>👆</span>Hold up the ball and tap it in the picture</li>
+            <li><span>🎯</span>Press Ready, hold it still, then throw it across</li>
+          </ol>
+          <button class="big-btn primary" id="t-cam" type="button"><svg class="ic"><use href="#i-camera"/></svg> Open camera</button>
+          <p class="fine" id="t-start-note">Works best with a brightly colored ball and a plain wall behind.</p>
+        </div>
+      </div>
+
+      <div class="dock">
+        <div class="review-row" id="t-review" hidden>
+          <button class="pill-btn small" id="t-play" type="button">▶ Replay</button>
+          <input id="t-scrub" type="range" min="0" max="0" value="0" step="1" aria-label="Step through the recorded throw, frame by frame">
+          <span class="scrub-t" id="t-scrub-t">Slow-motion replay</span>
+        </div>
+        <p class="status" id="t-status" role="status">Open the camera to start.</p>
+        <div class="chips">
+          <div class="chip"><small>Ball</small><b><i class="dot" id="t-swatch"></i> <span id="t-seen">—</span></b></div>
+          <div class="chip"><small>Speed</small><b id="t-speed">—</b></div>
+          <div class="chip"><small>Angle</small><b id="t-angle">—</b></div>
+          <div class="chip"><small>g</small><b id="t-gchip">—</b></div>
+        </div>
+        <div class="dock-btns">
+          <button class="pill-btn accent wide-btn" id="t-go" type="button">Ready</button>
+          <button class="pill-btn open-results" data-open="results" type="button"><svg class="ic"><use href="#i-chart"/></svg> Results <span class="count" id="t-count">0</span></button>
+        </div>
+      </div>
+    </div>
+
+    <aside class="panel results" aria-label="Results">
+      <div class="panel-head">
+        <h2>Results</h2>
+        <button class="round-btn flat" data-close type="button" aria-label="Close results"><svg class="ic"><use href="#i-close"/></svg></button>
+      </div>
+      <div class="panel-body">
+        <div class="headline">
+          <small>Your g</small>
+          <strong id="t-g">—</strong>
+          <p id="t-summary">No throws yet.</p>
+        </div>
+        <div id="t-plot-wrap" hidden>
+          <canvas class="plot" id="t-plot" aria-label="Last throw: path, and speeds across and up-down over time"></canvas>
+          <p class="fine">Left: the path of your last throw (dots) and the fitted arc. Right: the sideways speed stays flat, while the up-and-down speed falls in a straight line. Its slope is g.</p>
+        </div>
+        <table class="drops" aria-label="Throws">
+          <thead><tr><th>#</th><th>speed (m/s)</th><th>angle</th><th>g</th></tr></thead>
+          <tbody id="t-rows"></tbody>
+        </table>
+        <button class="pill-btn" id="t-clear" type="button"><svg class="ic"><use href="#i-trash"/></svg> Clear throws</button>
+      </div>
+    </aside>
+
+    <aside class="panel settings" aria-label="Settings">
+      <div class="panel-head">
+        <h2>Settings</h2>
+        <button class="round-btn flat" data-close type="button" aria-label="Close settings"><svg class="ic"><use href="#i-close"/></svg></button>
+      </div>
+      <div class="panel-body">
+        <fieldset class="seg-field">
+          <legend>Ball color <small>or tap the ball in the picture</small></legend>
+          <div class="seg colors" id="t-color" role="radiogroup">
+            <button type="button" data-v="red" role="radio"><i class="dot" style="background:#e5484d"></i> Red</button>
+            <button type="button" data-v="green" role="radio"><i class="dot" style="background:#2ea043"></i> Green</button>
+            <button type="button" data-v="blue" role="radio"><i class="dot" style="background:#1f6feb"></i> Blue</button>
+            <button type="button" data-v="orange" role="radio"><i class="dot" style="background:#eb821e"></i> Orange</button>
+          </div>
+        </fieldset>
+        <fieldset class="seg-field">
+          <legend>Which ball? <small>Its size sets the scale</small></legend>
+          <div class="seg" id="t-ballkind" role="radiogroup"></div>
+        </fieldset>
+        <label class="row-field">
+          <span>Screen height<small>Only used if the ball's size can't be measured</small></span>
+          <input id="t-view" type="number" inputmode="decimal" value="2" min="0.3" max="20" step="0.1">
+        </label>
+        <label class="row-field toggle">
+          <span>Ghost ball<small>Replay a perfect Earth throw next to yours</small></span>
+          <input id="t-ghost" type="checkbox" checked>
+        </label>
+        <label class="row-field toggle">
+          <span>Back camera<small>Off = the camera facing you</small></span>
+          <input id="t-backcam" type="checkbox" checked>
+        </label>
+      </div>
+    </aside>
+    <div class="scrim" hidden></div>
+  </section>
+
+  <!-- ============ Experiment 3: Swing ============ -->
+  <section class="screen exp" id="screen-swing" aria-label="Swing" hidden>
+    <div class="exp-main">
+      <div class="stage-wrap fit" id="s-wrap">
+        <div class="frame" id="s-frame">
+          <video id="s-video" autoplay muted playsinline></video>
+          <canvas id="s-canvas" aria-label="Camera picture: tap the ball to pick its color"></canvas>
+        </div>
+
+        <div class="topbar">
+          <a class="round-btn" href="#/" aria-label="Back to experiments"><svg class="ic"><use href="#i-back"/></svg></a>
+          <div class="topbar-title"><span>Swing</span><small>Time a pendulum</small></div>
+          <button class="round-btn" data-open="settings" type="button" aria-label="Settings"><svg class="ic"><use href="#i-gear"/></svg></button>
+        </div>
+
+        <div class="toast" id="s-toast" aria-live="polite"></div>
+
+        <div class="start-card" id="s-start">
+          <h2>Swing</h2>
+          <ol class="steps">
+            <li><span>🧶</span>Hang a bright ball on a string from something that won't move</li>
+            <li><span>📏</span>Measure the string, from the knot to the top of the ball</li>
+            <li><span>👆</span>Tap the ball in the picture, set it swinging, press Start</li>
+          </ol>
+          <button class="big-btn primary" id="s-cam" type="button"><svg class="ic"><use href="#i-camera"/></svg> Open camera</button>
+          <p class="fine" id="s-start-note">Works best with a brightly colored ball and a plain wall behind.</p>
+        </div>
+      </div>
+
+      <div class="dock">
+        <p class="status" id="s-status" role="status">Open the camera to start.</p>
+        <label class="length-row">
+          <span>String length</span>
+          <input id="s-length" type="number" inputmode="decimal" value="80" min="5" max="1000" step="1">
+          <span>cm</span>
+          <small>theory: one swing = <b id="s-theory">—</b></small>
+        </label>
+        <div class="chips">
+          <div class="chip"><small>Ball</small><b><i class="dot" id="s-swatch"></i> <span id="s-seen">—</span></b></div>
+          <div class="chip"><small>Swings</small><b id="s-n">0</b></div>
+          <div class="chip"><small>One swing</small><b id="s-T">—</b></div>
+          <div class="chip"><small>g</small><b id="s-gchip">—</b></div>
+        </div>
+        <div class="dock-btns">
+          <button class="pill-btn accent wide-btn" id="s-go" type="button">Start</button>
+          <button class="pill-btn open-results" data-open="results" type="button"><svg class="ic"><use href="#i-chart"/></svg> Results <span class="count" id="s-count">0</span></button>
+        </div>
+      </div>
+    </div>
+
+    <aside class="panel results" aria-label="Results">
+      <div class="panel-head">
+        <h2>Results</h2>
+        <button class="round-btn flat" data-close type="button" aria-label="Close results"><svg class="ic"><use href="#i-close"/></svg></button>
+      </div>
+      <div class="panel-body">
+        <div class="headline">
+          <small>Your g</small>
+          <strong id="s-g">—</strong>
+          <p id="s-summary">No runs yet.</p>
+        </div>
+        <div id="s-plots" hidden>
+          <canvas class="plot" id="s-plot" aria-label="Last run: the ball's swing over time with the fitted curve"></canvas>
+          <p class="fine">Your last run: the dots are the ball, the line is the fitted swing. Each tick is a pass through the middle.</p>
+        </div>
+        <div id="s-runs-wrap" hidden>
+          <canvas class="plot" id="s-runs-plot" aria-label="Time for one swing, squared, against string length, for every run"></canvas>
+          <p class="fine">Every run: because <b>T = 2π√(L/g)</b>, T² grows in a straight line with the length. The slope is 4π²/g. (Times are corrected to a tiny swing; big swings are a little slower.)</p>
+        </div>
+        <table class="drops" aria-label="Runs">
+          <thead><tr><th>#</th><th>L (cm)</th><th>T (s)</th><th>g</th></tr></thead>
+          <tbody id="s-rows"></tbody>
+        </table>
+        <p class="fine">L is measured to the middle of the ball: your string plus half the ball. T is the time for one full swing, there and back.</p>
+        <button class="pill-btn" id="s-clear" type="button"><svg class="ic"><use href="#i-trash"/></svg> Clear runs</button>
+      </div>
+    </aside>
+
+    <aside class="panel settings" aria-label="Settings">
+      <div class="panel-head">
+        <h2>Settings</h2>
+        <button class="round-btn flat" data-close type="button" aria-label="Close settings"><svg class="ic"><use href="#i-close"/></svg></button>
+      </div>
+      <div class="panel-body">
+        <fieldset class="seg-field">
+          <legend>Ball color <small>or tap the ball in the picture</small></legend>
+          <div class="seg colors" id="s-color" role="radiogroup">
+            <button type="button" data-v="red" role="radio"><i class="dot" style="background:#e5484d"></i> Red</button>
+            <button type="button" data-v="green" role="radio"><i class="dot" style="background:#2ea043"></i> Green</button>
+            <button type="button" data-v="blue" role="radio"><i class="dot" style="background:#1f6feb"></i> Blue</button>
+            <button type="button" data-v="orange" role="radio"><i class="dot" style="background:#eb821e"></i> Orange</button>
+          </div>
+        </fieldset>
+        <fieldset class="seg-field">
+          <legend>Which ball? <small>Half of it is added to the string</small></legend>
+          <div class="seg" id="s-ballkind" role="radiogroup"></div>
+        </fieldset>
+        <fieldset class="seg-field">
+          <legend>Stop after</legend>
+          <div class="seg" id="s-swings" role="radiogroup"></div>
+        </fieldset>
+        <label class="row-field toggle">
+          <span>Back camera<small>Off = the camera facing you</small></span>
+          <input id="s-backcam" type="checkbox" checked>
+        </label>
+      </div>
+    </aside>
+    <div class="scrim" hidden></div>
   </section>
 
   <script type="module" src="app.js"></script>

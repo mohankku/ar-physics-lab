@@ -22,11 +22,15 @@ measured data to fit, measured-vs-simulated overlays and what-if sweeps come nex
 **The app (`app/`, in progress).** The school experiments are moving into an
 installable, touch-first app: a home screen of experiment cards, the camera filling
 the screen, big buttons, and results in a side column (tablets, laptops) or a bottom
-sheet (phones). Experiment 1, Catch & drop, is there now; the others follow one at a
-time. It's a Progressive Web App: **Install app** in Chrome/Edge/Android, or Share →
+sheet (phones). All three experiments are in it: **Catch & drop** (hand gestures, or
+finger/mouse), **Throw** (tap the ball once to teach its color, press Ready, throw; g,
+launch speed and angle, slow-motion replay with a ghost Earth throw) and **Swing**
+(type the string length, press Start; times N swings, and every run goes into a T²-vs-L
+graph, so changing the string shows what sets the beat). It's a Progressive Web App: **Install app** in Chrome/Edge/Android, or Share →
 Add to Home Screen on iPad/iPhone, and it works offline once the hand tracker has
-been used once. It uses the front camera by default (a Settings switch picks the
-back one) and keeps the screen awake while playing. The same code can later be
+been used once. Catch & drop uses the front camera (you face it); Throw and Swing use
+the back camera (the device watches the ball), and a Settings switch flips either.
+The screen stays awake while an experiment runs. The same code can later be
 wrapped for the app stores (e.g. Capacitor) without a rewrite. The classic page
 (`index.html`) stays as it is until the app has every experiment.
 
@@ -36,10 +40,15 @@ Live: <https://mohankku.github.io/ar-physics-lab/> · also embedded at
 ## Layout
 
 ```
-app/                the app (PWA): open app/ — Experiment 1 so far
-  index.html          home screen + experiment screens
-  app.js              routing (#/ and #/catch), install button, service worker
-  catch.js            Catch & drop screen: full-screen camera, panels, settings
+app/                the app (PWA): open app/
+  index.html          home screen + the three experiment screens
+  app.js              routing (#/, #/catch, #/throw, #/swing), install button, service worker
+  catch.js            Catch & drop: hand tracking or touch, full-screen camera
+  throw.js            Throw: color tracking, auto start/stop, fit, replay
+  swing.js            Swing: timed swings, runs table, T²-vs-L graph
+  camera.js           the one shared camera; picture frame that keeps the camera's shape
+  panels.js           Results (side column / bottom sheet) and Settings panels
+  review.js           slow-motion replay and frame-by-frame slider after a throw
   app.css             touch-first styles, light/dark
   sw.js               offline: app files network-first, hand tracker cache-first
   manifest.webmanifest, icon.svg, icon-*.png
@@ -144,12 +153,22 @@ mapping, frame buffer, calibration, and the test bench's scenes. The camera test
 need a browser: with the local server running, open <http://localhost:8000/tests/>
 to run everything.
 
-**App smoke test (browser).** With the server running, open
-<http://localhost:8000/tests/app-smoke.html>. It plays Catch & drop in the app with
-synthetic finger touches (no hover, like a tablet): three drops from different
-heights, then checks the Results panel. Add `?w=390&h=844` for a phone-sized frame.
-Under headless Chrome add `?headless` (it hardly runs animation frames, so a timer
-stands in). The title ends `PASS …` or `FAIL …`.
+**App smoke tests (browser).** With the server running, open
+<http://localhost:8000/tests/app-smoke.html?exp=catch> (or `exp=throw`, `exp=swing`).
+They play the app the way a child would and check the Results panel:
+- **catch**: three drops by finger touches (no hover, like a tablet).
+- **throw**: a simulated camera (`tests/app-camera.js`, using the bench scenes) shows a
+  red ball. The test taps it, presses Ready, and the ball is thrown twice. Graded with
+  the bench's tolerances: g ±5%, sideways speed ±5%, launch speed ±8%, angle ±4°.
+- **swing**: runs with an 80 cm and then a 40 cm string. Period ±0.5%, g ±1%, also g
+  from the T²-vs-L slope.
+
+Add `?w=390&h=844` for a phone-sized frame and `?quiet` to hide the log box. Under
+headless Chrome add `?headless`. Headless Chrome hardly runs animation or video-frame
+callbacks, so one timer draws each camera frame and then runs the app's frame. Frames
+are then timed when the app sees them, not when they were taken, so the throw's launch
+speed (read at one instant) is reported but not graded. The title ends `PASS …` or
+`FAIL …`.
 
 **Test bench (browser, no ball needed).** Open
 <http://localhost:8000/tests/bench.html>. It's the real lab with the camera replaced
