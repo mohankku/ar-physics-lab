@@ -215,6 +215,11 @@ a { color: var(--accent); }
   width: 96px; min-height: 44px; padding: 0 10px; border-radius: 12px; border: 2px solid var(--line);
   background: var(--surface-2); text-align: right;
 }
+.dock-seg { justify-content: center; }
+.dock-seg button { min-height: 40px; background: rgba(255, 255, 255, 0.08); border-color: rgba(255, 255, 255, 0.16); color: #fff; }
+.dock-seg button[aria-checked="true"] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 35%, transparent); }
+.art-ramp { background: linear-gradient(160deg, #7c3aed, #0ea5e9); }
+.art-ramp svg { position: absolute; inset: 8px 0 0; width: 100%; height: calc(100% - 8px); }
 .count { min-width: 24px; padding: 1px 7px; border-radius: 999px; background: rgba(255, 255, 255, 0.25); font-size: 14px; }
 
 /* Panels: bottom sheets on narrow screens */

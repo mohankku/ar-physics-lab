@@ -19,6 +19,8 @@
        ?exp=swing  finger pulls the pendulum aside and lets go: 80 cm and
                    40 cm strings, then a mystery planet; checks the period
                    against the exact formula, g, and g from the T²-vs-L slope
+       ?exp=ramp   finger tilts the ramp: wood at 30° rolls (a and t against
+                   the physics), ice slides faster, carpet at 2° won't move
      Open on a local server: /tests/app-smoke.html?exp=throw
      ?w=390&h=844 for a phone-sized frame. ?headless under headless Chrome,
      which hardly runs animation frames: a 60 Hz timer stands in.
@@ -27,6 +29,7 @@
 <pre id="result">running…</pre>
 <script type="module">
 import { localGravity } from "../core/physics.js";
+import { rampAccel, SURFACES } from "../core/gesture.js";
 
 var q = new URLSearchParams(location.search);
 var EXP = q.get("exp") || "catch";
@@ -243,6 +246,66 @@ async function swingTest() {
   done(true, "swing: T " + r1.T + " s (formula " + T1.toFixed(3) + "), g from the slope " + gSlope + ", mystery " + r3.g + " = " + truth + "; the basketball's swing died away");
 }
 
+/* ---------- Ramp ---------- */
+async function rampTest() {
+  var cv = $("r-canvas"), H = 2, HINGE = { x: 0.88, y: 0.9 }, angle = 20;
+  var aspect = function() { var r = cv.getBoundingClientRect(); return r.width / r.height; };
+  var L = Math.min(1.6, 0.8 * H * aspect(), 0.8 * H), D = L - 0.1;   // the ramp shrinks to fit narrow screens
+  var topAt = function(deg) {
+    var a = deg * Math.PI / 180;
+    return { x: HINGE.x - L * Math.cos(a) / (H * aspect()), y: HINGE.y - L * Math.sin(a) / H };
+  };
+  /* Grab the raised end, tilt to `deg`, let go. */
+  async function tilt(deg) {
+    var from = topAt(angle);
+    fire(cv, "pointerdown", from.x, from.y);
+    await wait(300);
+    for (var i = 1; i <= 10; i++) { var q = topAt(angle + (deg - angle) * i / 10); fire(cv, "pointermove", q.x, q.y); await wait(20); }
+    await wait(500);
+    var to = topAt(deg);
+    fire(cv, "pointerup", to.x, to.y);
+    angle = deg;
+  }
+  function surface(name) { doc.querySelector('#r-surface [data-v="' + name + '"]').click(); }
+  function lastRow() {
+    var c = doc.querySelectorAll("#r-rows tr")[0].querySelectorAll("td");
+    return { angle: parseFloat(c[1].textContent), surface: c[2].textContent, t: parseFloat(c[3].textContent), a: parseFloat(c[4].textContent) };
+  }
+  await wait(400);
+  $("r-touch").click();
+  await wait(300);
+  // Wood, 30°: it rolls, with 5/7 of g·sinθ.
+  surface("wood");
+  await tilt(30);
+  await until(function() { return +text("r-count") === 1; }, 8000, "the wood run");
+  var w = lastRow(), aw = rampAccel(9.81, w.angle, SURFACES.wood);
+  log.push("wood: " + JSON.stringify(w) + " | expected a " + aw.a.toFixed(2) + ", t " + Math.sqrt(2 * D / aw.a).toFixed(2) + " | " + text("r-status"));
+  if (Math.abs(w.angle - 30) > 1) return done(false, "angle " + w.angle);
+  if (!within(w.a, aw.a, 2.5)) return done(false, "wood a " + w.a + " vs " + aw.a.toFixed(2));
+  if (!within(w.t, Math.sqrt(2 * D / w.a), 1.5)) return done(false, "time " + w.t + " doesn't fit d = ½at²");
+  if (/slid/.test(w.surface)) return done(false, "wood should roll");
+  // Ice, same angle: it slides, faster.
+  $("r-reset").click();
+  surface("ice");
+  await tilt(31);
+  await until(function() { return +text("r-count") === 2; }, 8000, "the ice run");
+  var ice = lastRow(), ai = rampAccel(9.81, ice.angle, SURFACES.ice);
+  log.push("ice: " + JSON.stringify(ice) + " | expected a " + ai.a.toFixed(2));
+  if (!/slid/.test(ice.surface) || !within(ice.a, ai.a, 2.5) || !(ice.a > w.a)) return done(false, "ice run " + JSON.stringify(ice));
+  // Carpet, 2°: it won't start.
+  $("r-reset").click();
+  surface("carpet");
+  await tilt(2);
+  await wait(800);
+  log.push("carpet 2°: " + text("r-status"));
+  if (!/won't move/.test(text("r-status")) || +text("r-count") !== 2) return done(false, "carpet should hold it");
+  doc.querySelector("#screen-ramp .open-results").click();
+  await wait(400);
+  if ($("r-plot-wrap").hidden || $("r-angle-wrap").hidden) return done(false, "graphs missing");
+  log.push("results: " + text("r-a") + " · " + text("r-summary"));
+  done(true, "ramp: wood rolls at " + w.a + " m/s², ice slides at " + ice.a + ", carpet holds at 2°");
+}
+
 /* Headless: one shared tick runs the app's animation callbacks. */
 var tickers = [], tickTimer = 0;
 function headlessTick() {
@@ -266,7 +329,7 @@ frame.onload = function() {
     };
     win.cancelAnimationFrame = function(id) { if (byId[id]) byId[id].cancelled = true; delete byId[id]; };
   }
-  var run = { "catch": catchTest, "throw": throwTest, "swing": swingTest }[EXP];
+  var run = { "catch": catchTest, "throw": throwTest, "swing": swingTest, "ramp": rampTest }[EXP];
   wait(300).then(run).catch(function(e) { done(false, String(e && e.message || e)); });
 };
 </script>

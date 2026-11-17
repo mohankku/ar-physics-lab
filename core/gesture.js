@@ -603,3 +603,151 @@ export class SwingBall {
     return passed ? { type: "pass", swings: this.swings, period: this.period } : null;
   }
 }
+
+/**
+ * Surfaces for the ramp. mu: sliding friction; crr: rolling resistance
+ * (how much a rolling ball sinks in and loses; carpet holds a ball still
+ * on a slope gentler than atan(crr) ≈ 3.4°).
+ */
+export const SURFACES = Object.freeze({
+  ice:    Object.freeze({ mu: 0.03, crr: 0.001 }),
+  wood:   Object.freeze({ mu: 0.4,  crr: 0.004 }),
+  carpet: Object.freeze({ mu: 0.6,  crr: 0.06 })
+});
+
+/**
+ * How fast a solid ball speeds up down a slope (m/s²), and whether it rolls.
+ * A rolling ball turns some of gravity's pull into spin, so it gets only
+ * 5/7 of g·sinθ (less rolling resistance). It rolls only while the surface
+ * can grip it (tanθ ≤ 3.5·μ); past that it skids and slides, losing μ of
+ * the push to friction instead. a = 0: it doesn't move at all.
+ * @param {number} g  m/s²
+ * @param {number} angleDeg  slope
+ * @param {{mu: number, crr: number}} s  surface
+ * @returns {{a: number, rolls: boolean}}
+ */
+export function rampAccel(g, angleDeg, s) {
+  const th = angleDeg * Math.PI / 180, sin = Math.sin(th), cos = Math.cos(th);
+  const rolls = Math.tan(th) <= 3.5 * s.mu;
+  const a = rolls ? 5 / 7 * g * (sin - s.crr * cos) : g * (sin - s.mu * cos);
+  return { a: Math.max(0, a), rolls };
+}
+
+const RAMP_MIN = 1, RAMP_MAX = 80;   // degrees
+
+/**
+ * Galileo's ramp: a plank hinged at its lower end, with a ball at the top.
+ * Make a fist on the raised end and move it to tilt the ramp (the ball waits
+ * at the top); open the hand and the ball sets off from rest, rolling (or
+ * sliding, see rampAccel) down to the stop at the bottom, timed exactly.
+ * hinge: frame fractions; positions along the ramp in meters from the top.
+ * States: "ready" (ball at the top) | "tilting" (held) | "rolling" | "done" | "stuck".
+ */
+export class RampBall {
+  /** @param {{catchR?: number, hinge?: {x: number, y: number}, angleDeg?: number}} [opts] */
+  constructor(opts = {}) {
+    this.catchR = opts.catchR ?? 0.15;
+    this.hinge = opts.hinge || { x: 0.88, y: 0.9 };
+    this.gate = new GestureGate(opts);
+    this.angleDeg = opts.angleDeg ?? 20;
+    this.reset();
+  }
+
+  reset() {
+    this.state = "ready";
+    this.s = 0;                // distance rolled from the top (m)
+    this.t = 0;                // physics time of the roll (s)
+    this.a = 0; this.rolls = true;
+    this._t0 = 0; this._slow = 1;
+    this._lastUpdate = null;
+    this.gate.reset();
+  }
+
+  /** Ramp length (m): up to 1.6 m, but it must fit on screen at any angle. */
+  lengthM(p) {
+    const aspect = p.aspect || 4 / 3;
+    return Math.min(1.6, 0.8 * p.h * aspect * this.hinge.x / 0.88, 0.8 * p.h * this.hinge.y / 0.9);
+  }
+  /** How far the ball rolls: the ramp less a little at each end (m). */
+  runM(p) { return Math.max(0.1, this.lengthM(p) - 0.1); }
+
+  /** A point `s` meters down the ramp from its top end, in frame fractions. */
+  along(s, p) {
+    const aspect = p.aspect || 4 / 3, th = this.angleDeg * Math.PI / 180, L = this.lengthM(p);
+    const fromHinge = L - s;
+    return { x: this.hinge.x - fromHinge * Math.cos(th) / (p.h * aspect), y: this.hinge.y - fromHinge * Math.sin(th) / p.h };
+  }
+  /** The raised end you grab to tilt it. */
+  top(p) { return this.along(0, p); }
+  /** The ball (on the ramp's line). */
+  ball(p) { return this.along(0.05 + this.s, p); }
+
+  near(hand, p) {
+    const aspect = p.aspect || 4 / 3, q = this.top(p), b = this.ball(p);
+    return Math.min(Math.hypot((hand.x - q.x) * aspect, hand.y - q.y),
+      Math.hypot((hand.x - b.x) * aspect, hand.y - b.y)) <= this.catchR;
+  }
+
+  /**
+   * Feed one hand reading (or null).
+   * @param {{g: number, h: number, aspect?: number, slow?: number, surface: {mu: number, crr: number}}} p
+   * @returns {{type: "grabbed"} | {type: "released", angleDeg: number, a: number, rolls: boolean} |
+   *   {type: "stuck", angleDeg: number} | null}
+   */
+  update(now, hand, p) {
+    const dt = this._lastUpdate == null ? 0 : Math.min(0.1, (now - this._lastUpdate) / 1000);
+    this._lastUpdate = now;
+    const gesture = hand ? this.gate.push(hand.open) : null;
+    if (this.state === "tilting") {
+      if (hand) {
+        const aspect = p.aspect || 4 / 3;
+        const dx = (this.hinge.x - hand.x) * p.h * aspect, dy = (this.hinge.y - hand.y) * p.h;
+        const target = Math.max(RAMP_MIN, Math.min(RAMP_MAX, Math.atan2(dy, Math.max(1e-6, dx)) * 180 / Math.PI));
+        const k = dt > 0 ? 1 - Math.exp(-dt / FOLLOW_S) : 1;
+        this.angleDeg += k * (target - this.angleDeg);
+      }
+      if (gesture === "release" || (!hand && now - this._lostAt > LOST_MS)) return this._release(now, p);
+      if (hand) this._lostAt = now;
+      return null;
+    }
+    if (gesture === "grab" && hand && this.near(hand, p)) {
+      this.state = "tilting";
+      this.s = 0; this.t = 0;
+      this._lostAt = now;
+      return { type: "grabbed" };
+    }
+    return null;
+  }
+
+  _release(now, p) {
+    const m = rampAccel(p.g, this.angleDeg, p.surface);
+    this.a = m.a; this.rolls = m.rolls;
+    this.s = 0; this.t = 0;
+    this._t0 = now;
+    this._slow = p.slow > 0 ? p.slow : 1;
+    if (!(m.a > 0)) {
+      this.state = "stuck";
+      return { type: "stuck", angleDeg: this.angleDeg };
+    }
+    this.state = "rolling";
+    return { type: "released", angleDeg: this.angleDeg, a: m.a, rolls: m.rolls };
+  }
+
+  /**
+   * Advance the roll to wall time `now`. Call every animation frame.
+   * @returns {{type: "done", t: number, d: number, a: number, rolls: boolean, angleDeg: number}|null}
+   *   t: exact time to roll the distance d (m) from rest
+   */
+  tick(now, p) {
+    if (this.state !== "rolling") return null;
+    const tau = Math.max(0, (now - this._t0) / 1000 * this._slow), D = this.runM(p);
+    const T = Math.sqrt(2 * D / this.a);
+    if (tau >= T) {
+      this.t = T; this.s = D; this.state = "done";
+      return { type: "done", t: T, d: D, a: this.a, rolls: this.rolls, angleDeg: this.angleDeg };
+    }
+    this.t = tau;
+    this.s = 0.5 * this.a * tau * tau;
+    return null;
+  }
+}

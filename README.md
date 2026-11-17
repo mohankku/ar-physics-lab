@@ -37,6 +37,13 @@ are needed:
   middle is timed. Each run (string length, pull, period, g) goes into a table and a
   T²-vs-L graph, so changing the string shows what sets the beat and what doesn't.
 
+- **Ramp**: Galileo's slope. Make a fist on the ramp's raised end and tilt it, open
+  the hand to let the ball go. Dots every 0.1 s show the gaps growing 1 : 3 : 5 : 7,
+  so distance against time² is a straight line whose slope gives the acceleration.
+  A rolling ball gets 5/7 of g·sinθ (some of the push goes into spinning); on ice it
+  can't grip, so it slides instead (faster); carpet holds it still on a gentle slope
+  (core RampBall, rampAccel, SURFACES).
+
 Every experiment can run on Earth (the real g where you are), the Moon, Mars, Jupiter
 or a mystery planet whose g the child measures, and in slow motion. Dropped and thrown balls
 bounce by their real bounciness (coefficient of restitution: tennis 0.75, so each
@@ -67,6 +74,7 @@ app/                the app (PWA): open app/
   catch.js            Catch & drop (core CatchBall)
   throw.js            Throw (core ThrowBall): flight arrows, distance, angle graph
   swing.js            Swing (core SwingBall): timed swings, runs table, T²-vs-L graph
+  ramp.js             Ramp (core RampBall): tilt by hand, surfaces, d-vs-t² and a-vs-angle graphs
   handinput.js        the hand: camera hand tracking or finger/mouse, for every screen
   worlds.js           Earth (local g) / Moon / Mars / Jupiter / mystery planet
   camera.js           the one shared camera
@@ -91,7 +99,8 @@ core/               AR engine (ES modules, no dependencies)
   physics.js          kinematics, least-squares (quadratic, line) and outlier-robust fits
   sim.js              FreeFall (Simulate) and HandBall, exact closed-form motion
   gesture.js          hand openness, grab/release gestures; the virtual balls:
-                        CatchBall (drop), ThrowBall (throw), SwingBall (pendulum)
+                        CatchBall (drop), ThrowBall (throw), SwingBall (pendulum),
+                        RampBall (Galileo's ramp)
   models.js           engineering models for the workbench: simulateFall (quadratic air drag)
   render.js           canvas drawing: realistic balls, overlays, result plots
 lab/                the experiment page
@@ -186,6 +195,8 @@ They play the app the way a child would and check the Results panel:
 - **throw**: two finger flicks at different angles: the ball must leave at the
   finger's speed (±6%) and angle (±6°) and reach the right height; then a throw on
   the mystery planet, whose measured g must match the revealed answer.
+- **ramp**: the finger tilts the ramp: wood at 30° rolls (a and t against the physics),
+  ice slides faster, carpet at 2° won't move.
 - **swing**: the finger pulls the pendulum aside and lets go: 80 cm (period vs the
   exact formula ±0.5%), 40 cm (g from the T²-vs-L slope), then a mystery planet.
 

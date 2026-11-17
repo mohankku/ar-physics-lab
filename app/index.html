@@ -79,6 +79,24 @@
           <span class="card-go">Start</span>
         </div>
       </a>
+      <a class="card card-live" href="#/ramp">
+        <div class="card-art art-ramp" aria-hidden="true">
+          <svg viewBox="0 0 300 140" preserveAspectRatio="xMidYMax meet">
+            <path d="M40 30 L270 128" stroke="#c48a52" stroke-width="8" stroke-linecap="round"/>
+            <path d="M40 34 L40 128 M20 130 H285" stroke="rgba(255,255,255,0.6)" stroke-width="3"/>
+            <path id="ramp-path" d="M48 20 L262 112" fill="none"/>
+            <circle r="11" fill="#e9f27e" stroke="#6d7800" stroke-width="2">
+              <animateMotion dur="2.6s" repeatCount="indefinite" keyPoints="0;0;1;1" keyTimes="0;0.15;0.75;1" keySplines="0.5 0 1 1;0.5 0 1 1;0 0 1 1" calcMode="spline"><mpath href="#ramp-path"/></animateMotion>
+            </circle>
+          </svg>
+        </div>
+        <div class="card-body">
+          <span class="card-tag">Experiment 4 · Slopes</span>
+          <h2>Ramp</h2>
+          <p>Tilt a ramp with your hand and let a ball roll. Galileo's trick: watch the distance grow with time². Ice, wood or carpet?</p>
+          <span class="card-go">Start</span>
+        </div>
+      </a>
     </main>
 
     <footer class="home-foot">
@@ -490,6 +508,133 @@
         <label class="row-field toggle">
           <span>Back camera<small>Off = the camera facing you</small></span>
           <input id="s-backcam" type="checkbox">
+        </label>
+      </div>
+    </aside>
+    <div class="scrim" hidden></div>
+  </section>
+
+  <!-- ============ Experiment 4: Ramp ============ -->
+  <section class="screen exp" id="screen-ramp" aria-label="Ramp" hidden>
+    <div class="exp-main">
+      <div class="stage-wrap" id="r-wrap">
+        <video id="r-video" autoplay muted playsinline></video>
+        <canvas id="r-canvas" aria-label="The ramp, the ball and your hand"></canvas>
+
+        <div class="topbar">
+          <a class="round-btn" href="#/" aria-label="Back to experiments"><svg class="ic"><use href="#i-back"/></svg></a>
+          <div class="topbar-title"><span>Ramp</span><small id="r-world">Earth · g = 9.81 m/s²</small></div>
+          <button class="round-btn" data-open="settings" type="button" aria-label="Settings"><svg class="ic"><use href="#i-gear"/></svg></button>
+        </div>
+
+        <div class="toast" id="r-toast" aria-live="polite"></div>
+
+        <div class="start-card" id="r-start">
+          <h2>Ramp</h2>
+          <ol class="steps">
+            <li><span>✊</span>Make a fist on the top of the ramp</li>
+            <li><span>📐</span>Move your hand to tilt it</li>
+            <li><span>✋</span>Open your hand: the ball rolls</li>
+          </ol>
+          <button class="big-btn primary" id="r-cam" type="button"><svg class="ic"><use href="#i-camera"/></svg> Use camera</button>
+          <button class="big-btn" id="r-touch" type="button"><svg class="ic"><use href="#i-touch"/></svg> Use finger or mouse</button>
+          <p class="fine" id="r-start-note">The first time, the hand tracker downloads (about 18 MB). Video never leaves this device.</p>
+        </div>
+      </div>
+
+      <div class="dock">
+        <p class="status" id="r-status" role="status">Pick camera or finger to start.</p>
+        <div class="seg dock-seg" id="r-surface" role="radiogroup" aria-label="Surface">
+          <button type="button" data-v="ice" role="radio">🧊 Ice</button>
+          <button type="button" data-v="wood" role="radio">🪵 Wood</button>
+          <button type="button" data-v="carpet" role="radio">🧶 Carpet</button>
+        </div>
+        <div class="chips">
+          <div class="chip"><small>Hand</small><b id="r-hand">—</b></div>
+          <div class="chip"><small>Angle</small><b id="r-angle">—</b></div>
+          <div class="chip"><small>Time</small><b id="r-time">—</b></div>
+          <div class="chip"><small>a (m/s²)</small><b id="r-acc">—</b></div>
+        </div>
+        <div class="dock-btns">
+          <button class="pill-btn" id="r-reset" type="button" title="Ball back to the top (Space)"><svg class="ic"><use href="#i-reset"/></svg> Ball back</button>
+          <button class="pill-btn accent open-results" data-open="results" type="button"><svg class="ic"><use href="#i-chart"/></svg> Results <span class="count" id="r-count">0</span></button>
+        </div>
+      </div>
+    </div>
+
+    <aside class="panel results" aria-label="Results">
+      <div class="panel-head">
+        <h2>Results</h2>
+        <button class="round-btn flat" data-close type="button" aria-label="Close results"><svg class="ic"><use href="#i-close"/></svg></button>
+      </div>
+      <div class="panel-body">
+        <div class="headline">
+          <small>Last run: it sped up by</small>
+          <strong id="r-a">—</strong>
+          <p id="r-summary">No runs yet.</p>
+        </div>
+        <div id="r-plot-wrap" hidden>
+          <canvas class="plot" id="r-plot" aria-label="Last run: distance against time squared"></canvas>
+          <p class="fine">Your last run: distance against time². A straight line means the distance grows with time², just as Galileo found. Its slope is half the acceleration.</p>
+        </div>
+        <div id="r-angle-wrap" hidden>
+          <canvas class="plot" id="r-angle-plot" aria-label="Acceleration against ramp angle for every run"></canvas>
+          <p class="fine">Every run, by surface. Dashed: a slide with no friction (g·sinθ). Blue: a perfect roll, 5/7 of that, because some of the push goes into spinning. At 90° the slide would be free fall.</p>
+        </div>
+        <table class="drops" aria-label="Runs">
+          <thead><tr><th>#</th><th>angle</th><th>surface</th><th>time (s)</th><th>a (m/s²)</th></tr></thead>
+          <tbody id="r-rows"></tbody>
+        </table>
+        <button class="pill-btn" id="r-clear" type="button"><svg class="ic"><use href="#i-trash"/></svg> Clear runs</button>
+      </div>
+    </aside>
+
+    <aside class="panel settings" aria-label="Settings">
+      <div class="panel-head">
+        <h2>Settings</h2>
+        <button class="round-btn flat" data-close type="button" aria-label="Close settings"><svg class="ic"><use href="#i-close"/></svg></button>
+      </div>
+      <div class="panel-body">
+        <fieldset class="seg-field">
+          <legend>World</legend>
+          <div class="seg" id="r-gravity" role="radiogroup">
+            <button type="button" data-v="earth" role="radio">🌍 Earth</button>
+            <button type="button" data-v="1.62" role="radio">🌕 Moon</button>
+            <button type="button" data-v="3.71" role="radio">🔴 Mars</button>
+            <button type="button" data-v="24.79" role="radio">🪐 Jupiter</button>
+          </div>
+        </fieldset>
+        <fieldset class="seg-field">
+          <legend>Speed</legend>
+          <div class="seg" id="r-slow" role="radiogroup">
+            <button type="button" data-v="1" role="radio">Real time</button>
+            <button type="button" data-v="0.5" role="radio">½ slow</button>
+            <button type="button" data-v="0.25" role="radio">¼ slow</button>
+          </div>
+        </fieldset>
+        <fieldset class="seg-field">
+          <legend>Ball</legend>
+          <div class="seg" id="r-ball" role="radiogroup">
+            <button type="button" data-v="tennis" role="radio">Tennis</button>
+            <button type="button" data-v="basketball" role="radio">Basketball</button>
+            <button type="button" data-v="bowling" role="radio">Bowling</button>
+          </div>
+        </fieldset>
+        <label class="row-field">
+          <span>Screen height<small>Meters from the bottom of the picture to the top</small></span>
+          <input id="r-view" type="number" inputmode="decimal" value="2" min="0.3" max="20" step="0.1">
+        </label>
+        <label class="row-field toggle">
+          <span>Mirror<small>Move right, the picture moves right</small></span>
+          <input id="r-mirror" type="checkbox" checked>
+        </label>
+        <label class="row-field toggle">
+          <span>Sound</span>
+          <input id="r-sound" type="checkbox" checked>
+        </label>
+        <label class="row-field toggle">
+          <span>Back camera<small>Off = the camera facing you</small></span>
+          <input id="r-backcam" type="checkbox">
         </label>
       </div>
     </aside>

@@ -1,5 +1,5 @@
 import { test, assert, near } from "./harness.js";
-import { handOpenness, palmCenter, GestureGate, CatchBall, ThrowBall, SwingBall } from "../core/gesture.js";
+import { handOpenness, palmCenter, GestureGate, CatchBall, ThrowBall, SwingBall, RampBall, rampAccel, SURFACES } from "../core/gesture.js";
 import { periodFactor } from "../core/pendulum.js";
 
 /* A synthetic right hand, fingers up, palm at (cx, cy) frame fractions.
@@ -312,4 +312,63 @@ test("Bounces: a thrown ball bounces on along the floor; you can grab it mid-bou
     else ball.tick(now, p);
   }
   assert(grabbed && ball.state === "held", "grabbed mid-bounce, from " + JSON.stringify(at));
+});
+
+test("rampAccel: a rolling ball gets 5/7 of g·sinθ; on ice it slides; carpet holds it on a gentle slope", () => {
+  const g = 9.81, s30 = 0.5, c30 = Math.cos(Math.PI / 6);
+  const wood = rampAccel(g, 30, SURFACES.wood);
+  assert(wood.rolls, "rolls on wood");
+  near(wood.a, 5 / 7 * g * (s30 - 0.004 * c30), 1e-9, "wood");
+  const ice = rampAccel(g, 30, SURFACES.ice);
+  assert(!ice.rolls, "skids on ice");
+  near(ice.a, g * (s30 - 0.03 * c30), 1e-9, "ice: slides, nearly g·sinθ");
+  assert(ice.a > wood.a, "sliding on ice beats rolling");
+  assert(rampAccel(g, 3, SURFACES.carpet).a === 0, "carpet: too gentle to start");
+  assert(rampAccel(g, 5, SURFACES.carpet).a > 0, "carpet: steeper and it goes");
+  assert(rampAccel(g, 70, SURFACES.wood).rolls === false, "very steep: even wood can't make it roll");
+});
+
+/* Grab the ramp's top end, tilt it to `deg`, let go; run until `until` s. */
+function rampRun(ramp, p, deg, until, fps = 60) {
+  const aspect = p.aspect, events = [], samples = [];
+  const top0 = ramp.top(p);
+  const L = ramp.lengthM(p), a = deg * Math.PI / 180;
+  const tilted = { x: ramp.hinge.x - L * Math.cos(a) / (p.h * aspect), y: ramp.hinge.y - L * Math.sin(a) / p.h };
+  for (let i = 0; i / fps <= until; i++) {
+    const now = i * 1000 / fps, t = now / 1000;
+    const hand = t < 0.2 ? { ...top0, open: 1 } : t < 0.5 ? { ...top0, open: 0 } : t < 1 ? { ...tilted, open: 0 }
+      : t < 1.3 ? { ...tilted, open: 1 } : null;
+    const ev = ramp.update(now, hand, p) || ramp.tick(now, p);
+    if (ev) events.push({ now, ...ev });
+    if (ramp.state === "rolling") samples.push({ t: ramp.t, s: ramp.s });
+  }
+  return { events, samples };
+}
+
+test("RampBall: tilt it by hand, let go, the ball rolls down in exactly √(2d/a)", () => {
+  const p = { g: 9.81, h: 2, aspect: 4 / 3, surface: SURFACES.wood };
+  const ramp = new RampBall();
+  const { events, samples } = rampRun(ramp, p, 30, 4);
+  const types = events.map((e) => e.type).join();
+  assert(types === "grabbed,released,done", types);
+  const rel = events[1], done = events[2];
+  near(rel.angleDeg, 30, 0.3, "tilted to the hand");
+  const a = rampAccel(9.81, rel.angleDeg, SURFACES.wood).a;
+  near(done.a, a, 1e-12, "acceleration");
+  near(done.t, Math.sqrt(2 * done.d / a), 1e-12, "time down the ramp");
+  // Galileo: distances in equal times grow 1 : 3 : 5 : 7.
+  const at = (t) => 0.5 * a * t * t, gaps = [1, 2, 3, 4].map((k) => at(0.1 * k) - at(0.1 * (k - 1)));
+  near(gaps[1] / gaps[0], 3, 1e-9, "3"); near(gaps[3] / gaps[0], 7, 1e-9, "7");
+  assert(samples.every((q) => Math.abs(q.s - at(q.t)) < 1e-12), "positions follow ½at²");
+  assert(ramp.state === "done" && Math.abs(ramp.s - done.d) < 1e-12, "at the bottom");
+});
+
+test("RampBall: on carpet a gentle slope won't start; slow motion keeps physics time", () => {
+  const p = { g: 9.81, h: 2, aspect: 4 / 3, surface: SURFACES.carpet };
+  const flat = new RampBall({ angleDeg: 10 });
+  const ev = rampRun(flat, p, 2, 3).events;
+  assert(ev.some((e) => e.type === "stuck") && flat.state === "stuck", ev.map((e) => e.type).join());
+  const a = rampRun(new RampBall(), { ...p, surface: SURFACES.wood }, 25, 4).events.find((e) => e.type === "done");
+  const b = rampRun(new RampBall(), { ...p, surface: SURFACES.wood, slow: 0.25 }, 25, 12).events.find((e) => e.type === "done");
+  near(a.t, b.t, 1e-9, "same roll time in slow motion");
 });
