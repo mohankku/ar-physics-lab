@@ -1,0 +1,909 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Physics Lab</title>
+  <meta name="description" content="Real physics experiments with your camera and your hands.">
+  <meta name="theme-color" content="#0b1220">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Physics Lab">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon-180.png">
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <!-- Icons, used with <svg><use href="#i-…"/></svg> -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-gear" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></g></symbol>
+    <symbol id="i-chart" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 20V4M4 20h16"/><path d="M7 16l4-4 3 2 5-6"/></g></symbol>
+    <symbol id="i-reset" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 1 0 2.3-5.7"/><path d="M4 4v4.5h4.5"/></g></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></symbol>
+    <symbol id="i-camera" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="2.5" y="6.5" width="13" height="11" rx="2.5"/><path d="M15.5 10.5l6-3.5v10l-6-3.5z"/></g></symbol>
+    <symbol id="i-touch" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11V5.5a1.5 1.5 0 0 1 3 0V11"/><path d="M12 10.5V9a1.5 1.5 0 0 1 3 0v2"/><path d="M15 10.5a1.5 1.5 0 0 1 3 0V15a6 6 0 0 1-6 6h-1a6 6 0 0 1-4.6-2.2L4 15.5a1.6 1.6 0 0 1 2.4-2L9 15.5V11"/></g></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></g></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></g></symbol>
+  </svg>
+
+  <!-- ============ Home ============ -->
+  <section class="screen home" id="screen-home" aria-label="Experiments">
+    <header class="home-head">
+      <div class="brand">
+        <img src="icon.svg" alt="" width="40" height="40">
+        <div>
+          <h1>Physics Lab</h1>
+          <p>Real experiments with your camera and your hands.</p>
+        </div>
+      </div>
+      <button class="install-btn" id="btn-install" type="button" hidden>Install app</button>
+    </header>
+
+    <main class="cards">
+      <a class="card card-live" href="#/catch">
+        <div class="card-art art-catch" aria-hidden="true">
+          <span class="art-ball"></span><span class="art-hand">✊</span>
+        </div>
+        <div class="card-body">
+          <span class="card-tag">Experiment 1 · Gravity</span>
+          <h2>Catch &amp; drop</h2>
+          <p>Catch a ball with your fist, let it go, and time the fall. Find out which planet you're on.</p>
+          <span class="card-go">Start</span>
+        </div>
+      </a>
+      <a class="card card-live" href="#/throw">
+        <div class="card-art art-throw" aria-hidden="true">
+          <svg viewBox="0 0 300 140" preserveAspectRatio="xMidYMax meet">
+            <path id="throw-arc" d="M40 128 Q150 -44 260 128" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="3" stroke-dasharray="7 7"/>
+            <circle r="12" fill="#ffd1d1" stroke="#e5484d" stroke-width="6">
+              <animateMotion dur="2.4s" repeatCount="indefinite" keyPoints="0;0;1;1" keyTimes="0;0.1;0.8;1" calcMode="linear"><mpath href="#throw-arc"/></animateMotion>
+            </circle>
+          </svg>
+        </div>
+        <div class="card-body">
+          <span class="card-tag">Experiment 2 · Motion</span>
+          <h2>Throw</h2>
+          <p>Grab a ball with your fist and throw it. See its speed split into across and up-and-down. Which angle goes farthest?</p>
+          <span class="card-go">Start</span>
+        </div>
+      </a>
+      <a class="card card-live" href="#/swing">
+        <div class="card-art art-swing" aria-hidden="true"><span class="art-string"></span></div>
+        <div class="card-body">
+          <span class="card-tag">Experiment 3 · Rhythm</span>
+          <h2>Swing</h2>
+          <p>Pull a ball on a string aside with your fist and let go. What changes its beat, and what doesn't? Measure g.</p>
+          <span class="card-go">Start</span>
+        </div>
+      </a>
+      <a class="card card-live" href="#/ramp">
+        <div class="card-art art-ramp" aria-hidden="true">
+          <svg viewBox="0 0 300 140" preserveAspectRatio="xMidYMax meet">
+            <path d="M40 30 L270 128" stroke="#c48a52" stroke-width="8" stroke-linecap="round"/>
+            <path d="M40 34 L40 128 M20 130 H285" stroke="rgba(255,255,255,0.6)" stroke-width="3"/>
+            <path id="ramp-path" d="M48 20 L262 112" fill="none"/>
+            <circle r="11" fill="#e9f27e" stroke="#6d7800" stroke-width="2">
+              <animateMotion dur="2.6s" repeatCount="indefinite" keyPoints="0;0;1;1" keyTimes="0;0.15;0.75;1" keySplines="0.5 0 1 1;0.5 0 1 1;0 0 1 1" calcMode="spline"><mpath href="#ramp-path"/></animateMotion>
+            </circle>
+          </svg>
+        </div>
+        <div class="card-body">
+          <span class="card-tag">Experiment 4 · Slopes</span>
+          <h2>Ramp</h2>
+          <p>Tilt a ramp with your hand and let a ball roll. Galileo's trick: watch the distance grow with time². Ice, wood or carpet?</p>
+          <span class="card-go">Start</span>
+        </div>
+      </a>
+      <a class="card card-live" href="#/light">
+        <div class="card-art art-light" aria-hidden="true">
+          <svg viewBox="0 0 300 140" preserveAspectRatio="xMidYMax meet">
+            <rect x="0" y="70" width="300" height="70" fill="rgba(80,170,255,0.35)"/>
+            <line x1="0" y1="70" x2="300" y2="70" stroke="rgba(255,255,255,0.8)" stroke-width="2"/>
+            <line x1="150" y1="10" x2="150" y2="135" stroke="rgba(255,255,255,0.5)" stroke-width="2" stroke-dasharray="6 5"/>
+            <g stroke="#ff4d4d" stroke-width="4" stroke-linecap="round" style="filter: drop-shadow(0 0 4px #ff3030)">
+              <line x1="70" y1="12" x2="150" y2="70"/>
+              <line x1="150" y1="70" x2="196" y2="140"/>
+              <line x1="150" y1="70" x2="230" y2="12" stroke-opacity="0.35"/>
+            </g>
+            <rect x="46" y="2" width="34" height="12" rx="2" fill="#2b2f3a" transform="rotate(36 70 12)"/>
+          </svg>
+        </div>
+        <div class="card-body">
+          <span class="card-tag">Experiment 5 · Light</span>
+          <h2>Light</h2>
+          <p>Hold a laser in your fist. Bounce it off a mirror, bend it into water, and trap it inside like an optical fiber.</p>
+          <span class="card-go">Start</span>
+        </div>
+      </a>
+      <a class="card card-live" href="#/orbit">
+        <div class="card-art art-orbit" aria-hidden="true">
+          <svg viewBox="0 0 300 140" preserveAspectRatio="xMidYMid meet">
+            <g fill="#fff" opacity="0.7"><circle cx="30" cy="20" r="1.2"/><circle cx="260" cy="30" r="1"/><circle cx="220" cy="110" r="1.3"/><circle cx="60" cy="115" r="1"/><circle cx="280" cy="80" r="1"/></g>
+            <ellipse id="orbit-path" cx="170" cy="70" rx="105" ry="52" fill="none" stroke="rgba(255,255,255,0.55)" stroke-width="2" stroke-dasharray="6 6"/>
+            <circle cx="105" cy="70" r="22" fill="#2563eb"/><circle cx="98" cy="64" r="8" fill="#3fa34d"/>
+            <circle r="6" fill="#f8fafc">
+              <animateMotion dur="4s" repeatCount="indefinite" path="M65 70 A105 52 0 1 0 275 70 A105 52 0 1 0 65 70"/>
+            </circle>
+          </svg>
+        </div>
+        <div class="card-body">
+          <span class="card-tag">Experiment 6 · Space</span>
+          <h2>Orbit</h2>
+          <p>Pinch a satellite and swing it around a planet. Too slow, it crashes; too fast, it escapes. Discover Kepler's laws.</p>
+          <span class="card-go">Start</span>
+        </div>
+      </a>
+    </main>
+
+    <footer class="home-foot">
+      <p>Video stays on this device. <a href="../workbench.html">Workbench for engineers</a> · <a href="../index.html">Classic lab</a></p>
+    </footer>
+  </section>
+
+  <!-- ============ Experiment 1: Catch & drop ============ -->
+  <section class="screen exp" id="screen-catch" aria-label="Catch and drop" hidden>
+    <div class="exp-main">
+      <div class="stage-wrap" id="c-wrap">
+        <video id="c-video" autoplay muted playsinline></video>
+        <canvas id="c-canvas" aria-label="The ball and your hand"></canvas>
+
+        <div class="topbar">
+          <a class="round-btn" href="#/" aria-label="Back to experiments"><svg class="ic"><use href="#i-back"/></svg></a>
+          <div class="topbar-title"><span>Catch &amp; drop</span><small id="c-world">Earth · g = 9.81 m/s²</small></div>
+          <button class="round-btn" id="c-open-settings" data-open="settings" type="button" aria-label="Settings"><svg class="ic"><use href="#i-gear"/></svg></button>
+        </div>
+
+        <div class="toast" id="c-toast" aria-live="polite"></div>
+
+        <div class="start-card" id="c-start">
+          <h2>Catch &amp; drop</h2>
+          <ol class="steps">
+            <li><span>✋</span>Show an open hand</li>
+            <li><span>✊</span>Make a fist on the ball to catch it</li>
+            <li><span>⬆️</span>Lift it, then open your hand</li>
+          </ol>
+          <button class="big-btn primary" id="c-cam" type="button"><svg class="ic"><use href="#i-camera"/></svg> Use camera</button>
+          <button class="big-btn" id="c-touch" type="button"><svg class="ic"><use href="#i-touch"/></svg> Use finger or mouse</button>
+          <button class="place-chip" id="c-place-chip" type="button">📍 Use my location for exact gravity</button>
+          <p class="fine law-line" data-law-line="catch"></p>
+          <p class="fine" id="c-start-note">The first time, the hand tracker downloads (about 18 MB). Video never leaves this device.</p>
+        </div>
+      </div>
+
+      <div class="dock">
+        <p class="status" id="c-status" role="status">Pick camera or finger to start.</p>
+        <div class="chips">
+          <div class="chip"><small>Hand</small><b id="c-hand">—</b></div>
+          <div class="chip"><small>Height</small><b id="c-h">—</b></div>
+          <div class="chip"><small>Fall time</small><b id="c-t">—</b></div>
+          <div class="chip"><small>Predicted</small><b id="c-theory">—</b></div>
+        </div>
+        <div class="dock-btns">
+          <button class="pill-btn" id="c-reset" type="button" title="Ball back to the middle (Space)"><svg class="ic"><use href="#i-reset"/></svg> Ball back</button>
+          <button class="pill-btn accent open-results" id="c-open-results" data-open="results" type="button"><svg class="ic"><use href="#i-chart"/></svg> Results <span class="count" id="c-count">0</span></button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Results: side panel on wide screens, bottom sheet on narrow ones -->
+    <aside class="panel results" id="c-results" aria-label="Results">
+      <div class="panel-head">
+        <h2>Results</h2>
+        <button class="round-btn flat" data-close type="button" aria-label="Close results"><svg class="ic"><use href="#i-close"/></svg></button>
+      </div>
+      <div class="panel-body">
+        <div class="headline">
+          <small id="c-g-label">Your g</small>
+          <strong id="c-g">—</strong>
+          <p id="c-summary">No drops yet. Drop the ball from a few different heights.</p>
+        </div>
+        <div class="mystery-box" id="c-mystery" hidden>
+          <p>Which world is it? Compare with your g:</p>
+          <div class="worlds">
+            <span>Moon <b>1.62</b></span><span>Mars <b>3.71</b></span><span>Venus <b>8.87</b></span>
+            <span>Earth <b id="c-earth-g">9.81</b></span><span>Neptune <b>11.15</b></span><span>Jupiter <b>24.79</b></span>
+          </div>
+          <button class="pill-btn" id="c-reveal" type="button">Reveal the answer</button>
+        </div>
+        <canvas class="plot" id="c-plot" aria-label="Graph of fall time squared against drop height"></canvas>
+        <p class="fine">Each dot is a drop. Because <b>h = ½·g·t²</b>, they line up on a straight line: its slope is 2/g.</p>
+        <table class="drops" aria-label="Drops">
+          <thead><tr><th>#</th><th>h (m)</th><th>t (s)</th><th>t² (s²)</th><th>g</th></tr></thead>
+          <tbody id="c-rows"></tbody>
+        </table>
+        <button class="pill-btn" id="c-clear" type="button"><svg class="ic"><use href="#i-trash"/></svg> Clear drops</button>
+        <div class="laws" data-laws="catch"></div>
+      </div>
+    </aside>
+
+    <!-- Settings sheet -->
+    <aside class="panel settings" id="c-settings" aria-label="Settings">
+      <div class="panel-head">
+        <h2>Settings</h2>
+        <button class="round-btn flat" data-close type="button" aria-label="Close settings"><svg class="ic"><use href="#i-close"/></svg></button>
+      </div>
+      <div class="panel-body">
+        <fieldset class="seg-field">
+          <legend>World</legend>
+          <div class="seg" id="c-gravity" role="radiogroup">
+            <button type="button" data-v="earth" role="radio">🌍 Earth</button>
+            <button type="button" data-v="1.62" role="radio">🌕 Moon</button>
+            <button type="button" data-v="3.71" role="radio">🔴 Mars</button>
+            <button type="button" data-v="24.79" role="radio">🪐 Jupiter</button>
+            <button type="button" data-v="mystery" role="radio">❓ Mystery</button>
+          </div>
+        </fieldset>
+        <fieldset class="seg-field place">
+          <legend>Where are you? <small>Earth's gravity is a little different from place to place</small></legend>
+          <button class="pill-btn" id="c-locate" type="button">📍 Use my location</button>
+          <div class="place-inputs">
+            <label>Latitude <input id="c-lat" type="number" inputmode="decimal" min="-90" max="90" step="0.1" placeholder="51.5"> °</label>
+            <label>Height <input id="c-alt" type="number" inputmode="decimal" min="-500" max="9000" step="1" placeholder="0"> m</label>
+          </div>
+          <p class="fine" id="c-place"></p>
+        </fieldset>
+        <fieldset class="seg-field">
+          <legend>Speed</legend>
+          <div class="seg" id="c-slow" role="radiogroup">
+            <button type="button" data-v="1" role="radio">Real time</button>
+            <button type="button" data-v="0.5" role="radio">½ slow</button>
+            <button type="button" data-v="0.25" role="radio">¼ slow</button>
+          </div>
+        </fieldset>
+        <fieldset class="seg-field">
+          <legend>Ball</legend>
+          <div class="seg" id="c-ball" role="radiogroup">
+            <button type="button" data-v="tennis" role="radio">Tennis</button>
+            <button type="button" data-v="basketball" role="radio">Basketball</button>
+            <button type="button" data-v="bowling" role="radio">Bowling</button>
+          </div>
+        </fieldset>
+        <label class="row-field">
+          <span>Screen height<small>Meters from the bottom of the picture to the top</small></span>
+          <input id="c-view" type="number" inputmode="decimal" value="2" min="0.3" max="20" step="0.1">
+        </label>
+        <label class="row-field toggle">
+          <span>Mirror<small>Move right, the picture moves right</small></span>
+          <input id="c-mirror" type="checkbox" checked>
+        </label>
+        <label class="row-field toggle">
+          <span>Sound</span>
+          <input id="c-sound" type="checkbox" checked>
+        </label>
+        <label class="row-field toggle">
+          <span>Back camera<small>Off = the camera facing you</small></span>
+          <input id="c-backcam" type="checkbox">
+        </label>
+      </div>
+    </aside>
+    <div class="scrim" id="c-scrim" hidden></div>
+  </section>
+
+  <!-- ============ Experiment 2: Throw ============ -->
+  <section class="screen exp" id="screen-throw" aria-label="Throw" hidden>
+    <div class="exp-main">
+      <div class="stage-wrap" id="t-wrap">
+        <video id="t-video" autoplay muted playsinline></video>
+        <canvas id="t-canvas" aria-label="The ball and your hand"></canvas>
+
+        <div class="topbar">
+          <a class="round-btn" href="#/" aria-label="Back to experiments"><svg class="ic"><use href="#i-back"/></svg></a>
+          <div class="topbar-title"><span>Throw</span><small id="t-world">Earth · g = 9.81 m/s²</small></div>
+          <button class="round-btn" data-open="settings" type="button" aria-label="Settings"><svg class="ic"><use href="#i-gear"/></svg></button>
+        </div>
+
+        <div class="toast" id="t-toast" aria-live="polite"></div>
+
+        <div class="start-card" id="t-start">
+          <h2>Throw</h2>
+          <ol class="steps">
+            <li><span>✊</span>Make a fist on the ball to grab it</li>
+            <li><span>💪</span>Swing your arm</li>
+            <li><span>✋</span>Open your hand to throw it</li>
+          </ol>
+          <button class="big-btn primary" id="t-cam" type="button"><svg class="ic"><use href="#i-camera"/></svg> Use camera</button>
+          <button class="big-btn" id="t-touch" type="button"><svg class="ic"><use href="#i-touch"/></svg> Use finger or mouse</button>
+          <p class="fine law-line" data-law-line="throw"></p>
+          <p class="fine" id="t-start-note">The first time, the hand tracker downloads (about 18 MB). Video never leaves this device.</p>
+        </div>
+      </div>
+
+      <div class="dock">
+        <p class="status" id="t-status" role="status">Pick camera or finger to start.</p>
+        <div class="chips">
+          <div class="chip"><small>Hand</small><b id="t-hand">—</b></div>
+          <div class="chip"><small>Speed</small><b id="t-speed">—</b></div>
+          <div class="chip"><small>Angle</small><b id="t-angle">—</b></div>
+          <div class="chip"><small>Distance</small><b id="t-dist">—</b></div>
+        </div>
+        <div class="dock-btns">
+          <button class="pill-btn" id="t-reset" type="button" title="Ball back (Space)"><svg class="ic"><use href="#i-reset"/></svg> Ball back</button>
+          <button class="pill-btn accent open-results" data-open="results" type="button"><svg class="ic"><use href="#i-chart"/></svg> Results <span class="count" id="t-count">0</span></button>
+        </div>
+      </div>
+    </div>
+
+    <aside class="panel results" aria-label="Results">
+      <div class="panel-head">
+        <h2>Results</h2>
+        <button class="round-btn flat" data-close type="button" aria-label="Close results"><svg class="ic"><use href="#i-close"/></svg></button>
+      </div>
+      <div class="panel-body">
+        <div class="headline">
+          <small id="t-g-label">Farthest throw</small>
+          <strong id="t-g">—</strong>
+          <p id="t-summary">No throws yet.</p>
+        </div>
+        <div class="mystery-box" id="t-mystery" hidden>
+          <p>Which world is it? Compare with the g you measured:</p>
+          <div class="worlds">
+            <span>Moon <b>1.62</b></span><span>Mars <b>3.71</b></span><span>Venus <b>8.87</b></span>
+            <span>Earth <b>9.81</b></span><span>Neptune <b>11.15</b></span><span>Jupiter <b>24.79</b></span>
+          </div>
+          <button class="pill-btn" id="t-reveal" type="button">Reveal the answer</button>
+        </div>
+        <div id="t-plot-wrap" hidden>
+          <canvas class="plot" id="t-plot" aria-label="Last throw: its path, and its speeds across and up-down over time"></canvas>
+          <p class="fine">Your last throw. Left: its path. Right: its speed across stays flat, while its up-down speed drops in a straight line: by g every second.</p>
+        </div>
+        <div id="t-angle-wrap" hidden>
+          <canvas class="plot" id="t-angle-plot" aria-label="How far each throw went for its speed, against its angle"></canvas>
+          <p class="fine">Every throw: how far it went for its speed, against its angle. The line is a perfect throw that lands at the height it started. The best angle is 45°.</p>
+        </div>
+        <table class="drops" aria-label="Throws">
+          <thead><tr><th>#</th><th>speed (m/s)</th><th>angle</th><th>distance (m)</th><th>top (m)</th></tr></thead>
+          <tbody id="t-rows"></tbody>
+        </table>
+        <button class="pill-btn" id="t-clear" type="button"><svg class="ic"><use href="#i-trash"/></svg> Clear throws</button>
+        <div class="laws" data-laws="throw"></div>
+      </div>
+    </aside>
+
+    <aside class="panel settings" aria-label="Settings">
+      <div class="panel-head">
+        <h2>Settings</h2>
+        <button class="round-btn flat" data-close type="button" aria-label="Close settings"><svg class="ic"><use href="#i-close"/></svg></button>
+      </div>
+      <div class="panel-body">
+        <fieldset class="seg-field">
+          <legend>World</legend>
+          <div class="seg" id="t-gravity" role="radiogroup">
+            <button type="button" data-v="earth" role="radio">🌍 Earth</button>
+            <button type="button" data-v="1.62" role="radio">🌕 Moon</button>
+            <button type="button" data-v="3.71" role="radio">🔴 Mars</button>
+            <button type="button" data-v="24.79" role="radio">🪐 Jupiter</button>
+            <button type="button" data-v="mystery" role="radio">❓ Mystery</button>
+          </div>
+        </fieldset>
+        <fieldset class="seg-field">
+          <legend>Speed</legend>
+          <div class="seg" id="t-slow" role="radiogroup">
+            <button type="button" data-v="1" role="radio">Real time</button>
+            <button type="button" data-v="0.5" role="radio">½ slow</button>
+            <button type="button" data-v="0.25" role="radio">¼ slow</button>
+          </div>
+        </fieldset>
+        <fieldset class="seg-field">
+          <legend>Ball</legend>
+          <div class="seg" id="t-ball" role="radiogroup">
+            <button type="button" data-v="tennis" role="radio">Tennis</button>
+            <button type="button" data-v="basketball" role="radio">Basketball</button>
+            <button type="button" data-v="bowling" role="radio">Bowling</button>
+          </div>
+        </fieldset>
+        <label class="row-field">
+          <span>Screen height<small>Meters from the bottom of the picture to the top</small></span>
+          <input id="t-view" type="number" inputmode="decimal" value="2" min="0.3" max="20" step="0.1">
+        </label>
+        <label class="row-field toggle">
+          <span>Mirror<small>Move right, the picture moves right</small></span>
+          <input id="t-mirror" type="checkbox" checked>
+        </label>
+        <label class="row-field toggle">
+          <span>Sound</span>
+          <input id="t-sound" type="checkbox" checked>
+        </label>
+        <label class="row-field toggle">
+          <span>Back camera<small>Off = the camera facing you</small></span>
+          <input id="t-backcam" type="checkbox">
+        </label>
+      </div>
+    </aside>
+    <div class="scrim" hidden></div>
+  </section>
+
+  <!-- ============ Experiment 3: Swing ============ -->
+  <section class="screen exp" id="screen-swing" aria-label="Swing" hidden>
+    <div class="exp-main">
+      <div class="stage-wrap" id="s-wrap">
+        <video id="s-video" autoplay muted playsinline></video>
+        <canvas id="s-canvas" aria-label="The pendulum and your hand"></canvas>
+
+        <div class="topbar">
+          <a class="round-btn" href="#/" aria-label="Back to experiments"><svg class="ic"><use href="#i-back"/></svg></a>
+          <div class="topbar-title"><span>Swing</span><small id="s-world">Earth · g = 9.81 m/s²</small></div>
+          <button class="round-btn" data-open="settings" type="button" aria-label="Settings"><svg class="ic"><use href="#i-gear"/></svg></button>
+        </div>
+
+        <div class="toast" id="s-toast" aria-live="polite"></div>
+
+        <div class="start-card" id="s-start">
+          <h2>Swing</h2>
+          <ol class="steps">
+            <li><span>✊</span>Make a fist on the ball to grab it</li>
+            <li><span>↔️</span>Pull it to the side</li>
+            <li><span>✋</span>Open your hand: it swings and I time it</li>
+          </ol>
+          <button class="big-btn primary" id="s-cam" type="button"><svg class="ic"><use href="#i-camera"/></svg> Use camera</button>
+          <button class="big-btn" id="s-touch" type="button"><svg class="ic"><use href="#i-touch"/></svg> Use finger or mouse</button>
+          <p class="fine law-line" data-law-line="swing"></p>
+          <p class="fine" id="s-start-note">The first time, the hand tracker downloads (about 18 MB). Video never leaves this device.</p>
+        </div>
+      </div>
+
+      <div class="dock">
+        <p class="status" id="s-status" role="status">Pick camera or finger to start.</p>
+        <label class="length-row">
+          <span>String length</span>
+          <input id="s-length" type="number" inputmode="decimal" value="80" min="10" max="170" step="5">
+          <span>cm</span>
+          <small>one swing should take <b id="s-theory">—</b></small>
+        </label>
+        <div class="chips">
+          <div class="chip"><small>Hand</small><b id="s-hand">—</b></div>
+          <div class="chip"><small>Swings</small><b id="s-n">0</b></div>
+          <div class="chip"><small>One swing</small><b id="s-T">—</b></div>
+          <div class="chip"><small>g</small><b id="s-gchip">—</b></div>
+        </div>
+        <div class="dock-btns">
+          <button class="pill-btn" id="s-reset" type="button" title="Stop the swing (Space)"><svg class="ic"><use href="#i-reset"/></svg> Stop</button>
+          <button class="pill-btn accent open-results" data-open="results" type="button"><svg class="ic"><use href="#i-chart"/></svg> Results <span class="count" id="s-count">0</span></button>
+        </div>
+      </div>
+    </div>
+
+    <aside class="panel results" aria-label="Results">
+      <div class="panel-head">
+        <h2>Results</h2>
+        <button class="round-btn flat" data-close type="button" aria-label="Close results"><svg class="ic"><use href="#i-close"/></svg></button>
+      </div>
+      <div class="panel-body">
+        <div class="headline">
+          <small id="s-g-label">Your g</small>
+          <strong id="s-g">—</strong>
+          <p id="s-summary">No runs yet.</p>
+        </div>
+        <div class="mystery-box" id="s-mystery" hidden>
+          <p>Which world is it? Compare with the g you measured:</p>
+          <div class="worlds">
+            <span>Moon <b>1.62</b></span><span>Mars <b>3.71</b></span><span>Venus <b>8.87</b></span>
+            <span>Earth <b>9.81</b></span><span>Neptune <b>11.15</b></span><span>Jupiter <b>24.79</b></span>
+          </div>
+          <button class="pill-btn" id="s-reveal" type="button">Reveal the answer</button>
+        </div>
+        <div id="s-runs-wrap" hidden>
+          <canvas class="plot" id="s-runs-plot" aria-label="Time for one swing, squared, against string length, for every run"></canvas>
+          <p class="fine">Every run: because <b>T = 2π√(L/g)</b>, T² grows in a straight line with the string length. The slope is 4π²/g. (Times are corrected to a tiny swing.)</p>
+        </div>
+        <table class="drops" aria-label="Runs">
+          <thead><tr><th>#</th><th>L (cm)</th><th>pull</th><th>T (s)</th><th>g</th></tr></thead>
+          <tbody id="s-rows"></tbody>
+        </table>
+        <p class="fine">T is the time for one full swing, there and back. Compare runs with the same string but a bigger or smaller pull: does it change much?</p>
+        <button class="pill-btn" id="s-clear" type="button"><svg class="ic"><use href="#i-trash"/></svg> Clear runs</button>
+        <div class="laws" data-laws="swing"></div>
+      </div>
+    </aside>
+
+    <aside class="panel settings" aria-label="Settings">
+      <div class="panel-head">
+        <h2>Settings</h2>
+        <button class="round-btn flat" data-close type="button" aria-label="Close settings"><svg class="ic"><use href="#i-close"/></svg></button>
+      </div>
+      <div class="panel-body">
+        <fieldset class="seg-field">
+          <legend>World</legend>
+          <div class="seg" id="s-gravity" role="radiogroup">
+            <button type="button" data-v="earth" role="radio">🌍 Earth</button>
+            <button type="button" data-v="1.62" role="radio">🌕 Moon</button>
+            <button type="button" data-v="3.71" role="radio">🔴 Mars</button>
+            <button type="button" data-v="24.79" role="radio">🪐 Jupiter</button>
+            <button type="button" data-v="mystery" role="radio">❓ Mystery</button>
+          </div>
+        </fieldset>
+        <fieldset class="seg-field">
+          <legend>Time this many swings</legend>
+          <div class="seg" id="s-swings" role="radiogroup"></div>
+        </fieldset>
+        <fieldset class="seg-field">
+          <legend>Speed</legend>
+          <div class="seg" id="s-slow" role="radiogroup">
+            <button type="button" data-v="1" role="radio">Real time</button>
+            <button type="button" data-v="0.5" role="radio">½ slow</button>
+            <button type="button" data-v="0.25" role="radio">¼ slow</button>
+          </div>
+        </fieldset>
+        <fieldset class="seg-field">
+          <legend>Ball <small>Light balls feel the air more</small></legend>
+          <div class="seg" id="s-ball" role="radiogroup">
+            <button type="button" data-v="tennis" role="radio">Tennis</button>
+            <button type="button" data-v="basketball" role="radio">Basketball</button>
+            <button type="button" data-v="bowling" role="radio">Bowling</button>
+          </div>
+        </fieldset>
+        <label class="row-field toggle">
+          <span>Air<small>Air slows the swing until it stops. Off = like in space</small></span>
+          <input id="s-air" type="checkbox" checked>
+        </label>
+        <label class="row-field">
+          <span>Screen height<small>Meters from the bottom of the picture to the top</small></span>
+          <input id="s-view" type="number" inputmode="decimal" value="2" min="0.3" max="20" step="0.1">
+        </label>
+        <label class="row-field toggle">
+          <span>Mirror<small>Move right, the picture moves right</small></span>
+          <input id="s-mirror" type="checkbox" checked>
+        </label>
+        <label class="row-field toggle">
+          <span>Sound</span>
+          <input id="s-sound" type="checkbox" checked>
+        </label>
+        <label class="row-field toggle">
+          <span>Back camera<small>Off = the camera facing you</small></span>
+          <input id="s-backcam" type="checkbox">
+        </label>
+      </div>
+    </aside>
+    <div class="scrim" hidden></div>
+  </section>
+
+  <!-- ============ Experiment 4: Ramp ============ -->
+  <section class="screen exp" id="screen-ramp" aria-label="Ramp" hidden>
+    <div class="exp-main">
+      <div class="stage-wrap" id="r-wrap">
+        <video id="r-video" autoplay muted playsinline></video>
+        <canvas id="r-canvas" aria-label="The ramp, the ball and your hand"></canvas>
+
+        <div class="topbar">
+          <a class="round-btn" href="#/" aria-label="Back to experiments"><svg class="ic"><use href="#i-back"/></svg></a>
+          <div class="topbar-title"><span>Ramp</span><small id="r-world">Earth · g = 9.81 m/s²</small></div>
+          <button class="round-btn" data-open="settings" type="button" aria-label="Settings"><svg class="ic"><use href="#i-gear"/></svg></button>
+        </div>
+
+        <div class="toast" id="r-toast" aria-live="polite"></div>
+
+        <div class="start-card" id="r-start">
+          <h2>Ramp</h2>
+          <ol class="steps">
+            <li><span>✊</span>Make a fist on the top of the ramp</li>
+            <li><span>📐</span>Move your hand to tilt it</li>
+            <li><span>✋</span>Open your hand: the ball rolls</li>
+          </ol>
+          <button class="big-btn primary" id="r-cam" type="button"><svg class="ic"><use href="#i-camera"/></svg> Use camera</button>
+          <button class="big-btn" id="r-touch" type="button"><svg class="ic"><use href="#i-touch"/></svg> Use finger or mouse</button>
+          <p class="fine law-line" data-law-line="ramp"></p>
+          <p class="fine" id="r-start-note">The first time, the hand tracker downloads (about 18 MB). Video never leaves this device.</p>
+        </div>
+      </div>
+
+      <div class="dock">
+        <p class="status" id="r-status" role="status">Pick camera or finger to start.</p>
+        <div class="seg dock-seg" id="r-surface" role="radiogroup" aria-label="Surface">
+          <button type="button" data-v="ice" role="radio">🧊 Ice</button>
+          <button type="button" data-v="wood" role="radio">🪵 Wood</button>
+          <button type="button" data-v="carpet" role="radio">🧶 Carpet</button>
+        </div>
+        <div class="chips">
+          <div class="chip"><small>Hand</small><b id="r-hand">—</b></div>
+          <div class="chip"><small>Angle</small><b id="r-angle">—</b></div>
+          <div class="chip"><small>Time</small><b id="r-time">—</b></div>
+          <div class="chip"><small>a (m/s²)</small><b id="r-acc">—</b></div>
+        </div>
+        <div class="dock-btns">
+          <button class="pill-btn" id="r-reset" type="button" title="Ball back to the top (Space)"><svg class="ic"><use href="#i-reset"/></svg> Ball back</button>
+          <button class="pill-btn accent open-results" data-open="results" type="button"><svg class="ic"><use href="#i-chart"/></svg> Results <span class="count" id="r-count">0</span></button>
+        </div>
+      </div>
+    </div>
+
+    <aside class="panel results" aria-label="Results">
+      <div class="panel-head">
+        <h2>Results</h2>
+        <button class="round-btn flat" data-close type="button" aria-label="Close results"><svg class="ic"><use href="#i-close"/></svg></button>
+      </div>
+      <div class="panel-body">
+        <div class="headline">
+          <small>Last run: it sped up by</small>
+          <strong id="r-a">—</strong>
+          <p id="r-summary">No runs yet.</p>
+        </div>
+        <div id="r-plot-wrap" hidden>
+          <canvas class="plot" id="r-plot" aria-label="Last run: distance against time squared"></canvas>
+          <p class="fine">Your last run: distance against time². A straight line means the distance grows with time², just as Galileo found. Its slope is half the acceleration.</p>
+        </div>
+        <div id="r-angle-wrap" hidden>
+          <canvas class="plot" id="r-angle-plot" aria-label="Acceleration against ramp angle for every run"></canvas>
+          <p class="fine">Every run, by surface. Dashed: a slide with no friction (g·sinθ). Blue: a perfect roll, 5/7 of that, because some of the push goes into spinning. At 90° the slide would be free fall.</p>
+        </div>
+        <table class="drops" aria-label="Runs">
+          <thead><tr><th>#</th><th>angle</th><th>surface</th><th>time (s)</th><th>a (m/s²)</th></tr></thead>
+          <tbody id="r-rows"></tbody>
+        </table>
+        <button class="pill-btn" id="r-clear" type="button"><svg class="ic"><use href="#i-trash"/></svg> Clear runs</button>
+        <div class="laws" data-laws="ramp"></div>
+      </div>
+    </aside>
+
+    <aside class="panel settings" aria-label="Settings">
+      <div class="panel-head">
+        <h2>Settings</h2>
+        <button class="round-btn flat" data-close type="button" aria-label="Close settings"><svg class="ic"><use href="#i-close"/></svg></button>
+      </div>
+      <div class="panel-body">
+        <fieldset class="seg-field">
+          <legend>World</legend>
+          <div class="seg" id="r-gravity" role="radiogroup">
+            <button type="button" data-v="earth" role="radio">🌍 Earth</button>
+            <button type="button" data-v="1.62" role="radio">🌕 Moon</button>
+            <button type="button" data-v="3.71" role="radio">🔴 Mars</button>
+            <button type="button" data-v="24.79" role="radio">🪐 Jupiter</button>
+          </div>
+        </fieldset>
+        <fieldset class="seg-field">
+          <legend>Speed</legend>
+          <div class="seg" id="r-slow" role="radiogroup">
+            <button type="button" data-v="1" role="radio">Real time</button>
+            <button type="button" data-v="0.5" role="radio">½ slow</button>
+            <button type="button" data-v="0.25" role="radio">¼ slow</button>
+          </div>
+        </fieldset>
+        <fieldset class="seg-field">
+          <legend>Ball</legend>
+          <div class="seg" id="r-ball" role="radiogroup">
+            <button type="button" data-v="tennis" role="radio">Tennis</button>
+            <button type="button" data-v="basketball" role="radio">Basketball</button>
+            <button type="button" data-v="bowling" role="radio">Bowling</button>
+          </div>
+        </fieldset>
+        <label class="row-field">
+          <span>Screen height<small>Meters from the bottom of the picture to the top</small></span>
+          <input id="r-view" type="number" inputmode="decimal" value="2" min="0.3" max="20" step="0.1">
+        </label>
+        <label class="row-field toggle">
+          <span>Mirror<small>Move right, the picture moves right</small></span>
+          <input id="r-mirror" type="checkbox" checked>
+        </label>
+        <label class="row-field toggle">
+          <span>Sound</span>
+          <input id="r-sound" type="checkbox" checked>
+        </label>
+        <label class="row-field toggle">
+          <span>Back camera<small>Off = the camera facing you</small></span>
+          <input id="r-backcam" type="checkbox">
+        </label>
+      </div>
+    </aside>
+    <div class="scrim" hidden></div>
+  </section>
+
+  <!-- ============ Experiment 5: Light ============ -->
+  <section class="screen exp" id="screen-light" aria-label="Light" hidden>
+    <div class="exp-main">
+      <div class="stage-wrap" id="l-wrap">
+        <video id="l-video" autoplay muted playsinline></video>
+        <canvas id="l-canvas" aria-label="The laser, its beam and your hand"></canvas>
+
+        <div class="topbar">
+          <a class="round-btn" href="#/" aria-label="Back to experiments"><svg class="ic"><use href="#i-back"/></svg></a>
+          <div class="topbar-title"><span>Light</span><small>Reflection and refraction</small></div>
+          <button class="round-btn" data-open="settings" type="button" aria-label="Settings"><svg class="ic"><use href="#i-gear"/></svg></button>
+        </div>
+
+        <div class="toast" id="l-toast" aria-live="polite"></div>
+
+        <div class="start-card" id="l-start">
+          <h2>Light</h2>
+          <ol class="steps">
+            <li><span>✊</span>Make a fist on the laser to pick it up</li>
+            <li><span>🔦</span>Move it to aim at a slant</li>
+            <li><span>✋</span>Open your hand to save the angles</li>
+          </ol>
+          <button class="big-btn primary" id="l-cam" type="button"><svg class="ic"><use href="#i-camera"/></svg> Use camera</button>
+          <button class="big-btn" id="l-touch" type="button"><svg class="ic"><use href="#i-touch"/></svg> Use finger or mouse</button>
+          <p class="fine law-line" data-law-line="light"></p>
+          <p class="fine" id="l-start-note">The first time, the hand tracker downloads (about 18 MB). Video never leaves this device.</p>
+        </div>
+      </div>
+
+      <div class="dock">
+        <p class="status" id="l-status" role="status">Pick camera or finger to start.</p>
+        <div class="seg dock-seg" id="l-material" role="radiogroup" aria-label="Surface">
+          <button type="button" data-v="mirror" role="radio">🪞 Mirror</button>
+          <button type="button" data-v="water" role="radio">💧 Water</button>
+          <button type="button" data-v="glass" role="radio">🔷 Glass</button>
+          <button type="button" data-v="diamond" role="radio">💎 Diamond</button>
+          <button type="button" data-v="mystery" role="radio">❓ Mystery</button>
+        </div>
+        <div class="chips">
+          <div class="chip"><small>Hand</small><b id="l-hand">—</b></div>
+          <div class="chip"><small>Angle in</small><b id="l-in">—</b></div>
+          <div class="chip"><small>Angle out</small><b id="l-out">—</b></div>
+          <div class="chip"><small>Bounces off</small><b id="l-bounce">—</b></div>
+        </div>
+        <div class="dock-btns">
+          <button class="pill-btn" id="l-reset" type="button" title="Laser back (Space)"><svg class="ic"><use href="#i-reset"/></svg> Laser back</button>
+          <button class="pill-btn accent open-results" data-open="results" type="button"><svg class="ic"><use href="#i-chart"/></svg> Results <span class="count" id="l-count">0</span></button>
+        </div>
+      </div>
+    </div>
+
+    <aside class="panel results" aria-label="Results">
+      <div class="panel-head">
+        <h2>Results</h2>
+        <button class="round-btn flat" data-close type="button" aria-label="Close results"><svg class="ic"><use href="#i-close"/></svg></button>
+      </div>
+      <div class="panel-body">
+        <div class="headline">
+          <small id="l-head-label">n</small>
+          <strong id="l-head">—</strong>
+          <p id="l-summary">No readings yet.</p>
+        </div>
+        <div class="mystery-box" id="l-mystery" hidden>
+          <p>Which material is it? Compare with the n you measured:</p>
+          <div class="worlds">
+            <span>Ice <b>1.31</b></span><span>Water <b>1.33</b></span><span>Alcohol <b>1.36</b></span>
+            <span>Oil <b>1.47</b></span><span>Glass <b>1.50</b></span><span>Amber <b>1.55</b></span>
+            <span>Sapphire <b>1.77</b></span><span>Diamond <b>2.42</b></span>
+          </div>
+          <button class="pill-btn" id="l-reveal" type="button">Reveal the answer</button>
+        </div>
+        <div id="l-plot-wrap" hidden>
+          <canvas class="plot" id="l-plot" aria-label="Angle out against angle in for your readings"></canvas>
+          <p class="fine">Your readings: filled dots shone in from the air, rings shone out from inside. The lines are Snell's law. From inside, past the dotted line, the light is trapped.</p>
+        </div>
+        <table class="drops" aria-label="Readings">
+          <thead><tr><th>#</th><th></th><th>from</th><th>in</th><th>out</th><th>n</th></tr></thead>
+          <tbody id="l-rows"></tbody>
+        </table>
+        <button class="pill-btn" id="l-clear" type="button"><svg class="ic"><use href="#i-trash"/></svg> Clear readings</button>
+        <div class="laws" data-laws="light"></div>
+      </div>
+    </aside>
+
+    <aside class="panel settings" aria-label="Settings">
+      <div class="panel-head">
+        <h2>Settings</h2>
+        <button class="round-btn flat" data-close type="button" aria-label="Close settings"><svg class="ic"><use href="#i-close"/></svg></button>
+      </div>
+      <div class="panel-body">
+        <label class="row-field toggle">
+          <span>Mirror the camera<small>Move right, the picture moves right</small></span>
+          <input id="l-mirror" type="checkbox" checked>
+        </label>
+        <label class="row-field toggle">
+          <span>Sound</span>
+          <input id="l-sound" type="checkbox" checked>
+        </label>
+        <label class="row-field toggle">
+          <span>Back camera<small>Off = the camera facing you</small></span>
+          <input id="l-backcam" type="checkbox">
+        </label>
+      </div>
+    </aside>
+    <div class="scrim" hidden></div>
+  </section>
+
+  <!-- ============ Experiment 6: Orbit ============ -->
+  <section class="screen exp" id="screen-orbit" aria-label="Orbit" hidden>
+    <div class="exp-main">
+      <div class="stage-wrap" id="o-wrap">
+        <video id="o-video" autoplay muted playsinline></video>
+        <canvas id="o-canvas" aria-label="The planet, the satellite and your hand"></canvas>
+
+        <div class="topbar">
+          <a class="round-btn" href="#/" aria-label="Back to experiments"><svg class="ic"><use href="#i-back"/></svg></a>
+          <div class="topbar-title"><span>Orbit</span><small>Time sped up thousands of times</small></div>
+          <button class="round-btn" data-open="settings" type="button" aria-label="Settings"><svg class="ic"><use href="#i-gear"/></svg></button>
+        </div>
+
+        <div class="toast" id="o-toast" aria-live="polite"></div>
+
+        <div class="start-card" id="o-start">
+          <h2>Orbit</h2>
+          <ol class="steps">
+            <li><span>🤏</span>Pinch thumb and finger together: the satellite jumps between them</li>
+            <li><span>👋</span>Swing it sideways and open your fingers to let go</li>
+            <li><span>🪐</span>Too slow? Too fast? Find the orbit!</li>
+          </ol>
+          <button class="big-btn primary" id="o-cam" type="button"><svg class="ic"><use href="#i-camera"/></svg> Use camera</button>
+          <button class="big-btn" id="o-touch" type="button"><svg class="ic"><use href="#i-touch"/></svg> Use finger or mouse</button>
+          <p class="fine law-line" data-law-line="orbit"></p>
+          <p class="fine" id="o-start-note">The first time, the hand tracker downloads (about 18 MB). Video never leaves this device.</p>
+        </div>
+      </div>
+
+      <div class="dock">
+        <p class="status" id="o-status" role="status">Pick camera or finger to start.</p>
+        <div class="seg dock-seg" id="o-planet" role="radiogroup" aria-label="Planet">
+          <button type="button" data-v="earth" role="radio">🌍 Earth</button>
+          <button type="button" data-v="moon" role="radio">🌕 Moon</button>
+          <button type="button" data-v="mars" role="radio">🔴 Mars</button>
+          <button type="button" data-v="jupiter" role="radio">🪐 Jupiter</button>
+        </div>
+        <div class="chips">
+          <div class="chip"><small>Hand</small><b id="o-hand">—</b></div>
+          <div class="chip"><small>Speed</small><b id="o-speed">—</b></div>
+          <div class="chip"><small>Height</small><b id="o-alt">—</b></div>
+          <div class="chip"><small>Escape speed</small><b id="o-esc">—</b></div>
+        </div>
+        <div class="dock-btns">
+          <button class="pill-btn" id="o-reset" type="button" title="New satellite (Space)"><svg class="ic"><use href="#i-reset"/></svg> New satellite</button>
+          <button class="pill-btn accent open-results" data-open="results" type="button"><svg class="ic"><use href="#i-chart"/></svg> Results <span class="count" id="o-count">0</span></button>
+        </div>
+      </div>
+    </div>
+
+    <aside class="panel results" aria-label="Results">
+      <div class="panel-head">
+        <h2>Results</h2>
+        <button class="round-btn flat" data-close type="button" aria-label="Close results"><svg class="ic"><use href="#i-close"/></svg></button>
+      </div>
+      <div class="panel-body">
+        <div class="headline">
+          <small id="o-head-label">Escape speed</small>
+          <strong id="o-head">—</strong>
+          <p id="o-summary">No launches yet.</p>
+        </div>
+        <div id="o-plot-wrap" hidden>
+          <canvas class="plot" id="o-plot" aria-label="Orbit time squared against orbit size cubed"></canvas>
+          <p class="fine">Every orbit: the time squared against the size cubed is a straight line. That's Kepler's third law.</p>
+        </div>
+        <table class="drops" aria-label="Launches">
+          <thead><tr><th>#</th><th></th><th>height</th><th>speed (km/s)</th><th>escape (km/s)</th><th>result</th></tr></thead>
+          <tbody id="o-rows"></tbody>
+        </table>
+        <button class="pill-btn" id="o-clear" type="button"><svg class="ic"><use href="#i-trash"/></svg> Clear launches</button>
+        <div class="laws" data-laws="orbit"></div>
+      </div>
+    </aside>
+
+    <aside class="panel settings" aria-label="Settings">
+      <div class="panel-head">
+        <h2>Settings</h2>
+        <button class="round-btn flat" data-close type="button" aria-label="Close settings"><svg class="ic"><use href="#i-close"/></svg></button>
+      </div>
+      <div class="panel-body">
+        <fieldset class="seg-field">
+          <legend>Speed</legend>
+          <div class="seg" id="o-slow" role="radiogroup">
+            <button type="button" data-v="1" role="radio">Fast</button>
+            <button type="button" data-v="0.5" role="radio">½ slow</button>
+            <button type="button" data-v="0.25" role="radio">¼ slow</button>
+          </div>
+        </fieldset>
+        <label class="row-field toggle">
+          <span>Equal-time slices<small>Kepler's second law: equal areas in equal times</small></span>
+          <input id="o-slices" type="checkbox" checked>
+        </label>
+        <label class="row-field toggle">
+          <span>Mirror the camera<small>Move right, the picture moves right</small></span>
+          <input id="o-mirror" type="checkbox" checked>
+        </label>
+        <label class="row-field toggle">
+          <span>Sound</span>
+          <input id="o-sound" type="checkbox" checked>
+        </label>
+        <label class="row-field toggle">
+          <span>Back camera<small>Off = the camera facing you</small></span>
+          <input id="o-backcam" type="checkbox">
+        </label>
+      </div>
+    </aside>
+    <div class="scrim" hidden></div>
+  </section>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

@@ -4,10 +4,16 @@
 import * as AR from "../../core/index.js";
 import { $, setStatus, numberIn, onSpace, selectSwatch, remember, restoreSettings, camera, openCamera } from "../ui.js";
 import { LabLog } from "../lablog.js";
-import { TrackReview } from "./track-review.js";
-import { TrackScale } from "./track-scale.js";
+import { makeReview } from "./review.js";
+import { makeScale } from "./scale.js";
 
 var R = AR.render;
+var TrackReview = makeReview("track", {
+  path: function(res) { return AR.fallPath(res); },
+  draw: AR.drawReplay,
+  g: function(res) { return res.fit.g; }
+});
+var TrackScale = makeScale("track");
 
 var REC_ICON = '<i class="fa-solid fa-circle"></i> ';
 var STOP_ICON = '<i class="fa-solid fa-stop"></i> ';

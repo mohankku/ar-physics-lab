@@ -1,5 +1,5 @@
 import { test, assert, near, throws } from "./harness.js";
-import { ColorTracker, colorPreset, COLOR_PRESETS, isSkinPixel, isBlueBackdrop, blobWidthInPixels } from "../core/vision.js";
+import { ColorTracker, colorPreset, COLOR_PRESETS, isSkinPixel, isBlueBackdrop, blobWidthInPixels, blobSizeInPixels } from "../core/vision.js";
 
 const RED = [229, 72, 77];
 
@@ -129,4 +129,16 @@ test("blobWidthInPixels ignores vertical blur and other blobs", () => {
   const w = blobWidthInPixels(d, W, H, 60, 70, { target: colorPreset("red"), tol: 60 });
   near(w, 30, 1.2, "width unaffected by the smear and the other ball");
   assert(blobWidthInPixels(discs(50, 50, []), 50, 50, 25, 25, {}) === null, "nothing there");
+});
+
+test("blobSizeInPixels: a sideways smear leaves the height true", () => {
+  // A fast throw smears the ball horizontally: 30 px tall, 70 px wide.
+  const W = 160, H = 100;
+  const d = discs(W, H, [[50, 50, 15, RED], [90, 50, 15, RED]]);
+  for (let y = 35; y < 65; y++) for (let x = 50; x < 90; x++) {
+    const i = (y * W + x) * 4; d[i] = RED[0]; d[i + 1] = RED[1]; d[i + 2] = RED[2];
+  }
+  const s = blobSizeInPixels(d, W, H, 70, 50, { target: colorPreset("red"), tol: 60 });
+  near(s.h, 30, 1.2, "height across the motion");
+  near(s.w, 70, 1.5, "width along the motion is smeared");
 });

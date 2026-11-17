@@ -1,0 +1,464 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>App smoke test</title>
+<style>
+  body { margin: 0; font: 14px system-ui, sans-serif; background: #555; }
+  iframe { border: 0; display: block; background: #000; }
+  #result { position: fixed; right: 8px; bottom: 8px; margin: 0; padding: 6px 10px; background: #fff; border-radius: 6px; max-width: 60%; white-space: pre-wrap; }
+  #result.hide { display: none; }
+</style>
+</head>
+<body>
+<!-- Plays the app end to end, the way a child would:
+       ?exp=catch  (default) three finger drops from different heights;
+                   synthetic touches with no hover, like a tablet
+       ?exp=throw  finger flicks throw the virtual ball; checks speed and
+                   angle against the finger, the arc's top, and the mystery g
+       ?exp=swing  finger pulls the pendulum aside and lets go: 80 cm and
+                   40 cm strings, then a mystery planet; checks the period
+                   against the exact formula, g, and g from the T²-vs-L slope
+       ?exp=ramp   finger tilts the ramp: wood at 30° rolls (a and t against
+                   the physics), ice slides faster, carpet at 2° won't move
+       ?exp=light  finger aims the laser: into water at 45°, out of it at 30°,
+                   trapped at 60°, the mirror, and a mystery material's n
+       ?exp=orbit  finger flicks: circular speed orbits (time = Kepler's third
+                   law), slow crashes, over escape speed escapes; laws card
+     Open on a local server: /tests/app-smoke.html?exp=throw
+     ?w=390&h=844 for a phone-sized frame. ?headless under headless Chrome,
+     which hardly runs animation frames: a 60 Hz timer stands in.
+     ?quiet hides the log box (for screenshots). The title ends up PASS or FAIL. -->
+<iframe id="app"></iframe>
+<pre id="result">running…</pre>
+<script type="module">
+import { localGravity } from "../core/physics.js";
+import { rampAccel, SURFACES } from "../core/gesture.js";
+import { refract, MATERIALS } from "../core/optics.js";
+import { PLANETS, circularSpeed, escapeSpeed, defaultWarp } from "../core/orbit.js";
+
+var q = new URLSearchParams(location.search);
+var EXP = q.get("exp") || "catch";
+var W = +q.get("w") || 1180, H = +q.get("h") || 820;
+if (q.has("quiet")) document.getElementById("result").className = "hide";
+var frame = document.getElementById("app");
+frame.style.width = W + "px"; frame.style.height = H + "px";
+frame.src = "../app/index.html?smoke=" + Date.now() + "#/" + EXP;
+
+var win, doc, log = [];
+var wait = function(ms) { return new Promise(function(r) { setTimeout(r, ms); }); };
+var $ = function(id) { return doc.getElementById(id); };
+var text = function(id) { return $(id).textContent.trim(); };
+function done(ok, msg) {
+  document.title = (ok ? "PASS " : "FAIL ") + msg;
+  document.getElementById("result").textContent = document.title + "\n" + log.join("\n");
+}
+function within(v, truth, pct) { return Math.abs(v - truth) <= Math.abs(truth) * pct / 100; }
+async function until(fn, ms, what) {
+  for (var t = 0; t < ms; t += 100) { if (fn()) return; await wait(100); }
+  throw new Error("timed out waiting for " + what + " (status: " + doc.querySelector(".screen:not([hidden]) .status").textContent + ")");
+}
+/* A pointer event at fractions (fx, fy) of an element's box. */
+function fire(el, type, fx, fy, pointerType) {
+  var r = el.getBoundingClientRect();
+  el.dispatchEvent(new win.PointerEvent(type, {
+    bubbles: true, cancelable: true, pointerId: 7, pointerType: pointerType || "touch", isPrimary: true,
+    clientX: r.left + fx * r.width, clientY: r.top + fy * r.height
+  }));
+}
+
+/* ---------- Catch & drop ---------- */
+async function catchTest() {
+  var cv = $("c-canvas");
+  async function drop(x, y0, y1) {
+    fire(cv, "pointerdown", x, y0);
+    await wait(150);
+    log.push("  pressed: hand " + text("c-hand") + ", ball height " + text("c-h"));
+    for (var i = 1; i <= 6; i++) fire(cv, "pointermove", x, y0 + (y1 - y0) * i / 6);
+    await wait(500);
+    fire(cv, "pointerup", x, y1);
+    await wait(1200);
+    log.push("drop from y=" + y1 + ": " + text("c-status"));
+  }
+  // Earth's g depends on where you are: type the equator.
+  var KEY = "physapp_place", saved = win.localStorage.getItem(KEY); // restored at the end
+  try {
+    $("c-lat").value = "0"; $("c-alt").value = "0";
+    $("c-lat").dispatchEvent(new win.Event("change", { bubbles: true }));
+    var gEq = localGravity(0).toFixed(3);
+    log.push("typed latitude 0: " + text("c-world"));
+    if (text("c-world").indexOf(gEq) < 0) return done(false, "world label should show " + gEq);
+    await wait(400);
+    $("c-touch").click();
+    await wait(200);
+    // Each drop starts from the middle (Ball back): a tennis ball keeps
+    // bouncing for a few seconds after it lands.
+    for (var y1 of [0.1, 0.5, 0.75]) {           // 1.80 m, 1.00 m, 0.50 m
+      $("c-reset").click();
+      await wait(150);
+      await drop(0.5, 0.35, y1);
+    }
+    $("c-open-results").click();
+    await wait(400);
+    var n = +text("c-count"), g = text("c-g"), rows = doc.querySelectorAll("#c-rows tr").length;
+    log.push("count " + n + ", rows " + rows + ", g " + g + "; " + text("c-summary"));
+    if (n !== 3 || rows !== 3) return done(false, "expected 3 drops, got " + n);
+    if (parseFloat(g).toFixed(3) !== gEq) return done(false, "g = " + g + ", expected " + gEq);
+    // "Use my location", with the device saying: Reykjavík-ish, 120 m up.
+    win.navigator.geolocation.getCurrentPosition = function(ok) {
+      ok({ coords: { latitude: 64.1466, longitude: -21.94, altitude: 120 } });
+    };
+    $("c-locate").click();
+    await wait(300);
+    var gHere = localGravity(64.15, 120).toFixed(3);
+    log.push("located: " + text("c-place") + " | " + text("c-world") + " | " + text("c-place-chip") + " | drops now " + text("c-count"));
+    if (text("c-world").indexOf(gHere) < 0) return done(false, "after locating, expected g " + gHere);
+    if (+text("c-count") !== 0) return done(false, "drops at the old g should be cleared");
+    if (text("c-place-chip").indexOf(gHere) < 0) return done(false, "start-card location button should show " + gHere);
+    done(true, "catch: 3 drops at the equator, g = " + g + "; located → " + gHere);
+  } finally {
+    if (saved === null) win.localStorage.removeItem(KEY); else win.localStorage.setItem(KEY, saved);
+  }
+}
+
+/* ---------- Throw ---------- */
+async function throwTest() {
+  var cv = $("t-canvas");
+  /* Grab the ball at (x0, y0), then flick the finger to (x1, y1) over `ms`
+   * and lift it while still moving. Returns the planned velocity (m/s). */
+  async function flick(x0, y0, x1, y1, ms) {
+    fire(cv, "pointerdown", x0, y0);
+    await wait(300);
+    var steps = Math.round(ms / 15), t0 = performance.now();
+    for (var i = 1; i <= steps; i++) { await wait(15); fire(cv, "pointermove", x0 + (x1 - x0) * i / steps, y0 + (y1 - y0) * i / steps); }
+    var took = (performance.now() - t0) / 1000;    // timers can run a little late
+    fire(cv, "pointerup", x1, y1);
+    var r = cv.getBoundingClientRect(), h = 2, aspect = r.width / r.height;
+    return { vx: (x1 - x0) * h * aspect / took, vy: -(y1 - y0) * h / took };
+  }
+  function lastRow() {
+    var c = doc.querySelectorAll("#t-rows tr")[0].querySelectorAll("td");
+    return { speed: parseFloat(c[1].textContent), angle: parseFloat(c[2].textContent), dist: c[3].textContent, top: parseFloat(c[4].textContent) };
+  }
+  await wait(400);
+  $("t-touch").click();
+  await wait(300);
+  var plans = [[0.25, 0.6, 0.45, 0.48, 240], [0.25, 0.6, 0.33, 0.4, 240]];   // flatter, then steeper
+  for (var k = 0; k < plans.length; k++) {
+    $("t-reset").click();
+    await wait(200);
+    var pl = plans[k], v = await flick.apply(null, pl);
+    await until(function() { return +text("t-count") === k + 1; }, 6000, "throw " + (k + 1));
+    var row = lastRow(), speed = Math.hypot(v.vx, v.vy), angle = Math.atan2(v.vy, Math.abs(v.vx)) * 180 / Math.PI;
+    log.push("throw " + (k + 1) + ": finger " + speed.toFixed(2) + " m/s at " + angle.toFixed(0) + "°; ball " + row.speed +
+      " m/s at " + row.angle + "°, distance " + row.dist + ", top " + row.top + " | " + text("t-status"));
+    if (!within(row.speed, speed, 6)) return done(false, "throw " + (k + 1) + " speed " + row.speed + ", finger " + speed.toFixed(2));
+    if (Math.abs(row.angle - angle) > 6) return done(false, "throw " + (k + 1) + " angle " + row.angle + ", finger " + angle.toFixed(0));
+    // Top of the arc: vy²/2g from the ball's own launch.
+    var vy = row.speed * Math.sin(row.angle * Math.PI / 180), top = vy * vy / (2 * 9.81);
+    if (Math.abs(row.top - top) > 0.02 + 0.05 * top) return done(false, "top " + row.top + " vs " + top.toFixed(2));
+  }
+  doc.querySelector("#screen-throw .open-results").click();
+  await wait(400);
+  if ($("t-plot-wrap").hidden || $("t-angle-wrap").hidden) return done(false, "graphs missing");
+  log.push("results: " + text("t-g-label") + " " + text("t-g") + " · " + text("t-summary"));
+  // Mystery planet: the g measured from the flight must match the answer.
+  doc.querySelector("#screen-throw .results [data-close]").click();
+  doc.querySelector('#t-gravity [data-v="mystery"]').click();
+  await wait(200);
+  $("t-reset").click();
+  await wait(200);
+  await flick(0.25, 0.6, 0.4, 0.42, 240);
+  await until(function() { return +text("t-count") === 1; }, 8000, "the mystery throw");
+  doc.querySelector("#screen-throw .open-results").click();
+  await wait(300);
+  $("t-reveal").click();
+  var gm = parseFloat(text("t-g")), truth = parseFloat(text("t-reveal").split("g = ")[1]);
+  log.push("mystery: measured " + text("t-g") + "; " + text("t-reveal"));
+  if (!within(gm, truth, 1)) return done(false, "mystery g " + gm + " vs " + truth);
+  done(true, "throw: 2 finger throws match the finger's speed and angle; mystery g " + gm + " = " + truth);
+}
+
+/* ---------- Swing ---------- */
+async function swingTest() {
+  var cv = $("s-canvas"), H = 2, PIV = { x: 0.5, y: 0.15 };
+  var aspect = function() { var r = cv.getBoundingClientRect(); return r.width / r.height; };
+  var at = function(L, deg) {
+    var a = deg * Math.PI / 180;
+    return { x: PIV.x + L * Math.sin(a) / (H * aspect()), y: PIV.y + L * Math.cos(a) / H };
+  };
+  function periodFactor(a) { // 1/AGM(1, cos(a/2)), as in core/pendulum.js
+    var x = 1, y = Math.cos(a / 2);
+    for (var i = 0; i < 20; i++) { var m = (x + y) / 2; y = Math.sqrt(x * y); x = m; }
+    return 1 / x;
+  }
+  /* Grab the hanging ball, pull it to `deg`, let go; wait for the run to be saved. */
+  async function pullAndTime(L, deg, n) {
+    var rest = at(L, 0), pulled = at(L, deg);
+    fire(cv, "pointerdown", rest.x, rest.y);
+    await wait(300);
+    for (var i = 1; i <= 10; i++) { var q = at(L, deg * i / 10); fire(cv, "pointermove", q.x, q.y); await wait(20); }
+    await wait(500);
+    fire(cv, "pointerup", pulled.x, pulled.y);
+    await until(function() { return +text("s-count") === n; }, 60000, "run " + n);
+    var c = doc.querySelectorAll("#s-rows tr")[0].querySelectorAll("td");
+    return { L: +c[1].textContent, deg: parseFloat(c[2].textContent), T: parseFloat(c[3].textContent), g: parseFloat(c[4].textContent) };
+  }
+  function setLength(cm) {
+    $("s-length").value = String(cm);
+    $("s-length").dispatchEvent(new win.Event("change", { bubbles: true }));
+  }
+  await wait(400);
+  $("s-touch").click();
+  await wait(300);
+  setLength(80);
+  var r1 = await pullAndTime(0.8, 15, 1);
+  var T1 = 2 * Math.PI * Math.sqrt(0.8 / 9.81) * periodFactor(r1.deg * Math.PI / 180);
+  log.push("run 1: L " + r1.L + " cm, pulled " + r1.deg + "°, T " + r1.T + " (formula " + T1.toFixed(3) + "), g " + r1.g + " | " + text("s-status"));
+  if (Math.abs(r1.deg - 15) > 1.5) return done(false, "pull angle " + r1.deg);
+  if (!within(r1.T, T1, 0.5)) return done(false, "T " + r1.T + " vs " + T1.toFixed(3));
+  if (!within(r1.g, 9.81, 0.5)) return done(false, "g " + r1.g);
+  setLength(40);
+  var r2 = await pullAndTime(0.4, 20, 2);
+  doc.querySelector("#screen-swing .open-results").click();
+  await wait(400);
+  var gSlope = parseFloat(text("s-g"));
+  log.push("run 2: L " + r2.L + " cm, pulled " + r2.deg + "°, T " + r2.T + "; g from the slope " + gSlope + " | " + text("s-summary"));
+  if (!within(gSlope, 9.81, 0.5)) return done(false, "g from the slope " + gSlope);
+  if ($("s-runs-wrap").hidden) return done(false, "no T²-vs-L graph");
+  // Mystery planet.
+  doc.querySelector("#screen-swing .results [data-close]").click();
+  doc.querySelector('#s-gravity [data-v="mystery"]').click();
+  await wait(300);
+  setLength(60);
+  var r3 = await pullAndTime(0.6, 15, 1);
+  doc.querySelector("#screen-swing .open-results").click();
+  await wait(300);
+  $("s-reveal").click();
+  var truth = parseFloat(text("s-reveal").split("g = ")[1]);
+  log.push("mystery: measured " + r3.g + "; " + text("s-reveal"));
+  if (!within(r3.g, truth, 1)) return done(false, "mystery g " + r3.g + " vs " + truth);
+  // Air: a light basketball's swing dies away, and the app says it stopped.
+  doc.querySelector("#screen-swing .results [data-close]").click();
+  doc.querySelector('#s-ball [data-v="basketball"]').click();
+  var rest = at(0.6, 0), pulled = at(0.6, 15);
+  fire(cv, "pointerdown", rest.x, rest.y);
+  await wait(300);
+  for (var i = 1; i <= 10; i++) { var q = at(0.6, 1.5 * i); fire(cv, "pointermove", q.x, q.y); await wait(20); }
+  await wait(500);
+  fire(cv, "pointerup", pulled.x, pulled.y);
+  await until(function() { return /It stopped/.test(text("s-status")); }, 120000, "the swing to die away");
+  log.push("basketball: " + text("s-status"));
+  done(true, "swing: T " + r1.T + " s (formula " + T1.toFixed(3) + "), g from the slope " + gSlope + ", mystery " + r3.g + " = " + truth + "; the basketball's swing died away");
+}
+
+/* ---------- Ramp ---------- */
+async function rampTest() {
+  var cv = $("r-canvas"), H = 2, HINGE = { x: 0.88, y: 0.9 }, angle = 20;
+  var aspect = function() { var r = cv.getBoundingClientRect(); return r.width / r.height; };
+  var L = Math.min(1.6, 0.8 * H * aspect(), 0.8 * H), D = L - 0.1;   // the ramp shrinks to fit narrow screens
+  var topAt = function(deg) {
+    var a = deg * Math.PI / 180;
+    return { x: HINGE.x - L * Math.cos(a) / (H * aspect()), y: HINGE.y - L * Math.sin(a) / H };
+  };
+  /* Grab the raised end, tilt to `deg`, let go. */
+  async function tilt(deg) {
+    var from = topAt(angle);
+    fire(cv, "pointerdown", from.x, from.y);
+    await wait(300);
+    for (var i = 1; i <= 10; i++) { var q = topAt(angle + (deg - angle) * i / 10); fire(cv, "pointermove", q.x, q.y); await wait(20); }
+    await wait(500);
+    var to = topAt(deg);
+    fire(cv, "pointerup", to.x, to.y);
+    angle = deg;
+  }
+  function surface(name) { doc.querySelector('#r-surface [data-v="' + name + '"]').click(); }
+  function lastRow() {
+    var c = doc.querySelectorAll("#r-rows tr")[0].querySelectorAll("td");
+    return { angle: parseFloat(c[1].textContent), surface: c[2].textContent, t: parseFloat(c[3].textContent), a: parseFloat(c[4].textContent) };
+  }
+  await wait(400);
+  $("r-touch").click();
+  await wait(300);
+  // Wood, 30°: it rolls, with 5/7 of g·sinθ.
+  surface("wood");
+  await tilt(30);
+  await until(function() { return +text("r-count") === 1; }, 8000, "the wood run");
+  var w = lastRow(), aw = rampAccel(9.81, w.angle, SURFACES.wood);
+  log.push("wood: " + JSON.stringify(w) + " | expected a " + aw.a.toFixed(2) + ", t " + Math.sqrt(2 * D / aw.a).toFixed(2) + " | " + text("r-status"));
+  if (Math.abs(w.angle - 30) > 1) return done(false, "angle " + w.angle);
+  if (!within(w.a, aw.a, 2.5)) return done(false, "wood a " + w.a + " vs " + aw.a.toFixed(2));
+  if (!within(w.t, Math.sqrt(2 * D / w.a), 1.5)) return done(false, "time " + w.t + " doesn't fit d = ½at²");
+  if (/slid/.test(w.surface)) return done(false, "wood should roll");
+  // Ice, same angle: it slides, faster.
+  $("r-reset").click();
+  surface("ice");
+  await tilt(31);
+  await until(function() { return +text("r-count") === 2; }, 8000, "the ice run");
+  var ice = lastRow(), ai = rampAccel(9.81, ice.angle, SURFACES.ice);
+  log.push("ice: " + JSON.stringify(ice) + " | expected a " + ai.a.toFixed(2));
+  if (!/slid/.test(ice.surface) || !within(ice.a, ai.a, 2.5) || !(ice.a > w.a)) return done(false, "ice run " + JSON.stringify(ice));
+  // Carpet, 2°: it won't start.
+  $("r-reset").click();
+  surface("carpet");
+  await tilt(2);
+  await wait(800);
+  log.push("carpet 2°: " + text("r-status"));
+  if (!/won't move/.test(text("r-status")) || +text("r-count") !== 2) return done(false, "carpet should hold it");
+  doc.querySelector("#screen-ramp .open-results").click();
+  await wait(400);
+  if ($("r-plot-wrap").hidden || $("r-angle-wrap").hidden) return done(false, "graphs missing");
+  log.push("results: " + text("r-a") + " · " + text("r-summary"));
+  done(true, "ramp: wood rolls at " + w.a + " m/s², ice slides at " + ice.a + ", carpet holds at 2°");
+}
+
+/* ---------- Light ---------- */
+async function lightTest() {
+  var cv = $("l-canvas"), O = { x: 0.5, y: 0.55 }, at = { x: 0.22, y: 0.2 };
+  var aspect = function() { var r = cv.getBoundingClientRect(); return r.width / r.height; };
+  var spot = function(deg, below) {
+    var a = deg * Math.PI / 180, r = 0.3;
+    return { x: O.x - r * Math.sin(a) / aspect(), y: below ? O.y + r * Math.cos(a) : O.y - r * Math.cos(a) };
+  };
+  /* Pick up the laser, move it to `deg` (above or below the surface), put it down. */
+  async function aim(deg, below) {
+    var to = spot(deg, below);
+    fire(cv, "pointerdown", at.x, at.y);
+    await wait(250);
+    for (var i = 1; i <= 10; i++) fire(cv, "pointermove", at.x + (to.x - at.x) * i / 10, at.y + (to.y - at.y) * i / 10), await wait(20);
+    await wait(400);
+    var live = text("l-status");
+    fire(cv, "pointerup", to.x, to.y);
+    await wait(300);
+    at = to;
+    return live;
+  }
+  function row() {
+    var c = doc.querySelectorAll("#l-rows tr")[0].querySelectorAll("td");
+    return { from: c[2].textContent, inDeg: parseFloat(c[3].textContent), out: c[4].textContent, n: parseFloat(c[5].textContent) };
+  }
+  function material(m) { doc.querySelector('#l-material [data-v="' + m + '"]').click(); }
+  await wait(400);
+  $("l-touch").click();
+  await wait(300);
+  material("water");
+  var said = await aim(45, false), r1 = row();
+  log.push("water from air: " + JSON.stringify(r1) + " | " + said);
+  var exp1 = refract(1, 1.33, r1.inDeg).outDeg;
+  if (Math.abs(r1.inDeg - 45) > 1.5 || Math.abs(parseFloat(r1.out) - exp1) > 1 || !within(r1.n, 1.33, 0.8)) return done(false, "water from air " + JSON.stringify(r1));
+  said = await aim(30, true); var r2 = row();
+  log.push("water from inside: " + JSON.stringify(r2) + " | " + said);
+  if (r2.from !== "water" || Math.abs(parseFloat(r2.out) - refract(1.33, 1, r2.inDeg).outDeg) > 1) return done(false, "from inside " + JSON.stringify(r2));
+  said = await aim(60, true); var r3 = row();
+  log.push("water at 60° from inside: " + JSON.stringify(r3) + " | " + said);
+  if (r3.out !== "trapped" || !/Trapped/.test(said)) return done(false, "should be trapped: " + JSON.stringify(r3));
+  material("mirror");
+  await wait(200);
+  at = { x: 0.22, y: 0.2 };   // the laser came back up: a mirror can't have it underneath
+  said = await aim(35, false); var r4 = row();
+  log.push("mirror: " + JSON.stringify(r4) + " | " + said);
+  if (Math.abs(parseFloat(r4.out) - r4.inDeg) > 0.5) return done(false, "mirror " + JSON.stringify(r4));
+  material("mystery");
+  await wait(200);
+  await aim(50, false); var r5 = row();
+  doc.querySelector("#screen-light .open-results").click();
+  await wait(300);
+  $("l-reveal").click();
+  var truth = parseFloat(text("l-reveal").split("n = ")[1]);
+  log.push("mystery: measured n " + text("l-head") + "; " + text("l-reveal"));
+  if (!within(parseFloat(text("l-head")), truth, 0.8)) return done(false, "mystery n " + text("l-head") + " vs " + truth);
+  if ($("l-plot-wrap").hidden) return done(false, "graph missing");
+  done(true, "light: water bends 45° → " + r1.out + " (n " + r1.n + "), trapped at 60° from inside, mirror in = out, mystery n " + text("l-head") + " = " + truth);
+}
+
+/* ---------- Orbit ---------- */
+async function orbitTest() {
+  var cv = $("o-canvas"), E = PLANETS.earth, C = { x: 0.5, y: 0.52 };
+  var aspect = function() { var r = cv.getBoundingClientRect(); return r.width / r.height; };
+  var H = function() { return 12 * E.R / Math.min(1, aspect()); };
+  var warp = defaultWarp(E);
+  /* Flick the satellite sideways (right) from its start at `speed` m/s. */
+  async function flick(speed) {
+    $("o-reset").click();
+    await wait(150);
+    var x0 = C.x, y0 = C.y - 2.6 * E.R / H();
+    var v = speed * warp / (H() * aspect());              // frame fractions per second
+    fire(cv, "pointerdown", x0, y0);
+    await wait(300);
+    var t0 = performance.now(), steps = 16;
+    for (var i = 1; i <= steps; i++) { await wait(15); fire(cv, "pointermove", x0 + v * (performance.now() - t0) / 1000, y0); }
+    fire(cv, "pointerup", x0 + v * (performance.now() - t0) / 1000, y0);
+  }
+  function row() {
+    var c = doc.querySelectorAll("#o-rows tr")[0].querySelectorAll("td");
+    return { speed: parseFloat(c[3].textContent), esc: parseFloat(c[4].textContent), result: c[5].textContent };
+  }
+  await wait(400);
+  $("o-touch").click();
+  await wait(300);
+  var r0 = 2.62 * E.R;                                     // just past the start point after the flick
+  await flick(circularSpeed(E.GM, r0));
+  await until(function() { return +text("o-count") === 1; }, 20000, "the first orbit");
+  var st = text("o-status"), m = /took (.+?) \(Kepler's third law says (.+?)\)/.exec(st), r1 = row();
+  log.push("circular flick: " + JSON.stringify(r1) + " | " + st);
+  if (!m || m[1] !== m[2]) return done(false, "orbit time vs Kepler: " + st);
+  await flick(1.15 * circularSpeed(E.GM, r0));
+  await until(function() { return +text("o-count") === 2; }, 30000, "the second orbit");
+  log.push("faster flick: " + JSON.stringify(row()) + " | " + text("o-status"));
+  await flick(0.3 * circularSpeed(E.GM, r0));
+  await until(function() { return +text("o-count") === 3; }, 20000, "the slow one to crash");
+  var r3 = row();
+  log.push("slow flick: " + JSON.stringify(r3));
+  if (!/crashed/.test(r3.result)) return done(false, "slow flick should crash: " + JSON.stringify(r3));
+  await flick(1.12 * escapeSpeed(E.GM, r0));
+  await until(function() { return +text("o-count") === 4; }, 30000, "the fast one to escape");
+  var r4 = row();
+  log.push("fast flick: " + JSON.stringify(r4) + " | " + text("o-status"));
+  if (!/escaped/.test(r4.result) || !(r4.speed > r4.esc)) return done(false, "fast flick should escape: " + JSON.stringify(r4));
+  // A fist anywhere picks it up: press far from the satellite, let go without
+  // flicking, and it falls (and crashes) from there.
+  $("o-reset").click();
+  await wait(150);
+  fire(cv, "pointerdown", 0.88, 0.85);
+  await wait(400);
+  fire(cv, "pointerup", 0.88, 0.85);
+  await until(function() { return +text("o-count") === 5; }, 20000, "the far-away grab to fall");
+  log.push("grabbed from afar and dropped: " + JSON.stringify(row()));
+  if (!/crashed/.test(row().result)) return done(false, "far grab: " + JSON.stringify(row()));
+  doc.querySelector("#screen-orbit .open-results").click();
+  await wait(400);
+  if ($("o-plot-wrap").hidden) return done(false, "no Kepler graph");
+  var laws = doc.querySelector('#screen-orbit [data-laws]').textContent;
+  if (!/Kepler's third law/.test(laws) || !/Newton/.test(laws)) return done(false, "laws card missing");
+  done(true, "orbit: circular flick orbits in " + m[1] + " = Kepler; slow crashes; " + r4.speed + " km/s escapes (needs " + r4.esc + "); a press anywhere grabs it");
+}
+
+/* Headless: one shared tick runs the app's animation callbacks. */
+var tickers = [], tickTimer = 0;
+function headlessTick() {
+  tickTimer = 0;
+  var run = tickers; tickers = [];
+  run.forEach(function(e) { if (!e.cancelled) e.cb(win.performance.now()); });
+}
+
+frame.onload = function() {
+  win = frame.contentWindow;
+  doc = frame.contentDocument;
+  win.addEventListener("error", function(e) { log.push("app error: " + e.message + " @" + e.filename + ":" + e.lineno); });
+  win.addEventListener("unhandledrejection", function(e) { log.push("app rejection: " + e.reason); });
+  if (q.has("headless")) {
+    var nextId = 1, byId = {};
+    win.requestAnimationFrame = function(cb) {
+      var e = { cb: cb, id: nextId++ };
+      tickers.push(e); byId[e.id] = e;
+      if (!tickTimer) tickTimer = setTimeout(headlessTick, 1000 / 30);
+      return e.id;
+    };
+    win.cancelAnimationFrame = function(id) { if (byId[id]) byId[id].cancelled = true; delete byId[id]; };
+  }
+  var run = { "catch": catchTest, "throw": throwTest, "swing": swingTest, "ramp": rampTest, "light": lightTest, "orbit": orbitTest }[EXP];
+  wait(300).then(run).catch(function(e) { done(false, String(e && e.message || e)); });
+};
+</script>
+</body>
+</html>

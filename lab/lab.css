@@ -6,6 +6,17 @@
 .phys-hero .privacy { font-size: 12px; color: var(--text-muted, #6b7a8a); }
 .phys-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin: 14px 0 20px; }
 .phys-exp-card { border: 1px solid var(--border-color, #e8ecef); border-radius: 10px; padding: 14px; background: var(--card-bg, #fff); font-size: 13px; }
+button.phys-exp-card { font: inherit; font-size: 13px; text-align: left; color: var(--text-color, #1f2937); cursor: pointer; display: flex; flex-direction: column; align-items: flex-start; justify-content: flex-start; width: 100%; }
+button.phys-exp-card:hover { border-color: var(--link-color, #1a56db); }
+button.phys-exp-card:focus-visible { outline: 2px solid var(--link-color, #3b82f6); outline-offset: 2px; }
+.phys-exp-card.soon { opacity: .7; }
+.phys-exp-go { font-weight: 600; color: var(--link-color, #1a56db); }
+.phys-exp-card.active .phys-exp-go::after { content: " · open below ↓"; font-weight: 400; }
+.phys-exp[hidden] { display: none; }
+.phys-steps { margin: 6px 0 10px; padding-left: 22px; font-size: 14px; line-height: 1.55; color: var(--text-color, #1f2937); }
+.phys-steps li { margin: 4px 0; }
+.phys-more { margin: 0 0 8px; font-size: 13px; }
+.phys-more summary { cursor: pointer; font-weight: 600; color: var(--link-color, #1a56db); }
 .phys-exp-card h3 { margin: 0 0 4px; font-size: 15px; }
 .phys-exp-card p { margin: 6px 0 10px; color: var(--text-muted, #475569); line-height: 1.5; }
 .phys-exp-card.active { border-color: var(--link-color, #1a56db); box-shadow: 0 0 0 1px var(--link-color, #1a56db); }
@@ -13,7 +24,7 @@
 .phys-badge.live { background: #e6f7f0; color: #0a7a4b; border: 1px solid #b6e8d5; }
 .phys-badge.soon { background: #f1f5f9; color: #64748b; border: 1px solid #e2e8f0; }
 .phys-mode-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0; }
-.phys-mode-btn { border: 1px solid var(--border-color, #dde3e8); background: #fff; border-radius: 8px; padding: 8px 14px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; color: var(--text-color, #1f2937); }
+.phys-mode-btn { border: 1px solid var(--border-color, #dde3e8); background: var(--card-bg, #fff); border-radius: 8px; padding: 8px 14px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; color: var(--text-color, #1f2937); }
 .phys-mode-btn.active { background: #0f2027; color: #fff; border-color: #0f2027; }
 .phys-mode-btn:focus-visible { outline: 2px solid var(--link-color, #3b82f6); outline-offset: 2px; }
 .phys-mode { border: 1px solid var(--border-color, #e8ecef); border-radius: 12px; padding: 16px; background: var(--card-bg, #fff); margin-bottom: 16px; }
@@ -55,4 +66,10 @@
 .swatch:focus-visible { outline: 2px solid var(--link-color, #3b82f6); outline-offset: 2px; }
 .theory-box { background: var(--code-bg, #f1f5f9); border: 1px solid var(--border-color, #e2e8f0); border-radius: 10px; padding: 12px 14px; font-size: 13px; line-height: 1.6; margin-top: 14px; }
 .theory-box code { font-size: 12.5px; }
+.phys-field.check { flex-direction: row; align-items: center; gap: 6px; }
+.phys-plot { color: var(--text-color, #1f2937); display: block; width: 100%; height: 170px; border: 1px solid var(--border-color, #e2e8f0); border-radius: 8px; margin-top: 6px; }
 @media (max-width: 600px) { .phys-controls { flex-direction: column; align-items: stretch; } }
+.stage.mirrored video { transform: scaleX(-1); }
+.stage.pointer-play { cursor: grab; touch-action: none; }
+.stage.pointer-play:active { cursor: grabbing; }
+.stage.pointer-play .stage-empty { display: none; }

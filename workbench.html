@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:,">
+  <title>Physics Workbench</title>
+  <meta name="description" content="Simulate physical motion from your own measured parameters: falls with air drag, impact speed and energy.">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="styles/base.css">
+  <link rel="stylesheet" href="lab/lab.css">
+  <style>
+    .wb-results { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin: 10px 0; }
+    .wb-results .phys-read small { display: block; font-size: 11.5px; margin-top: 2px; }
+    .wb-plots { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .wb-plots canvas { height: 220px; }
+    .wb-plots figcaption { font-size: 12px; font-weight: 600; color: var(--text-muted, #64748b); margin-top: 4px; }
+    .wb-legend { font-size: 12px; color: var(--text-muted, #64748b); margin: 6px 0 0; }
+    .wb-legend span { display: inline-block; width: 18px; height: 0; border-top: 2px solid; vertical-align: middle; margin: 0 4px 0 10px; }
+    .wb-legend span.dash { border-top-style: dashed; }
+    .phys-field input, .phys-field select { width: 140px; }
+    @media (max-width: 640px) { .wb-plots { grid-template-columns: 1fr; } .phys-field input, .phys-field select { width: auto; } }
+  </style>
+</head>
+<body>
+  <div class="phys-lab" id="workbench">
+    <div class="phys-hero">
+      <h2><i class="fa-solid fa-gears"></i> Physics Workbench</h2>
+      <p>Simulate motion from your own numbers: enter what you know about the object and its
+      setup, and see how it moves, how fast it hits, and how much air resistance matters.</p>
+      <p class="privacy"><i class="fa-solid fa-lock"></i> Everything runs in your browser. For
+      the classroom experiments, open the <a href="./">AR Physics Lab</a>.</p>
+    </div>
+
+    <div class="phys-mode">
+      <h3><i class="fa-solid fa-arrow-down"></i> Falling object with air drag</h3>
+      <p class="desc">Models <code>m·dv/dt = m·g − ½·ρ·C<sub>d</sub>·A·v²</code>: gravity pulls
+      the object down, and air pushes back harder the faster it goes, until it reaches its
+      terminal speed. Typical uses: parts falling off a conveyor or shelf, drop tests, packaging.
+      Set the air density to 0 to compare with a vacuum.</p>
+
+      <div class="phys-controls">
+        <label class="phys-field">Start from
+          <select id="wb-preset">
+            <option value="custom">Custom object</option>
+            <option value="steel">Steel ball bearing, 25 mm</option>
+            <option value="tennis" selected>Tennis ball</option>
+            <option value="pingpong">Ping-pong ball</option>
+            <option value="box">Cardboard box, 30 cm, 0.5 kg</option>
+            <option value="sheet">Sheet of paper, flat</option>
+          </select>
+        </label>
+        <label class="phys-field">Drop height (m)
+          <input id="wb-h" type="number" value="2" min="0.01" step="0.1">
+        </label>
+        <label class="phys-field">Initial speed down (m/s)
+          <input id="wb-v0" type="number" value="0" step="0.1">
+        </label>
+        <label class="phys-field">Mass (kg)
+          <input id="wb-m" type="number" value="0.058" min="0.0001" step="0.001">
+        </label>
+        <label class="phys-field">Shape
+          <select id="wb-shape"></select>
+        </label>
+        <label class="phys-field">Drag coefficient C<sub>d</sub>
+          <input id="wb-cd" type="number" value="0.47" min="0" step="0.01">
+        </label>
+        <label class="phys-field">Size across (cm)
+          <input id="wb-size" type="number" value="6.7" min="0" step="0.1">
+        </label>
+        <label class="phys-field">Frontal area (cm²)
+          <input id="wb-area" type="number" value="35.26" min="0" step="0.01">
+        </label>
+        <label class="phys-field">Gravity g (m/s²)
+          <input id="wb-g" type="number" value="9.81" min="0.01" step="0.01">
+        </label>
+        <label class="phys-field">Air density (kg/m³)
+          <input id="wb-rho" type="number" value="1.225" min="0" step="0.001">
+        </label>
+      </div>
+      <p class="phys-status" id="wb-status"></p>
+
+      <div class="wb-results">
+        <div class="phys-read">landing time<strong id="wb-r-t">—</strong><small id="wb-r-t2"></small></div>
+        <div class="phys-read">impact speed<strong id="wb-r-v">—</strong><small id="wb-r-v2"></small></div>
+        <div class="phys-read">impact energy<strong id="wb-r-e">—</strong><small id="wb-r-e2"></small></div>
+        <div class="phys-read">terminal speed<strong id="wb-r-vt">—</strong><small id="wb-r-vt2"></small></div>
+      </div>
+
+      <div class="wb-plots">
+        <figure style="margin:0"><canvas class="phys-plot" id="wb-plot-v"></canvas><figcaption>Speed vs. time</figcaption></figure>
+        <figure style="margin:0"><canvas class="phys-plot" id="wb-plot-y"></canvas><figcaption>Distance fallen vs. time</figcaption></figure>
+      </div>
+      <p class="wb-legend"><span style="border-color:#1a56db"></span>with air drag
+        <span class="dash" style="border-color:#94a3b8"></span>in a vacuum
+        <span class="dash" style="border-color:#d97706"></span>terminal speed</p>
+
+      <div class="phys-btn-row">
+        <button class="pub-btn" id="wb-export" type="button"><i class="fa-solid fa-download"></i> Export CSV</button>
+      </div>
+    </div>
+
+    <div class="theory-box">
+      <strong>Coming next on this page:</strong> import your own measured data (CSV) and fit the
+      model to it, overlay measured against simulated, and what-if sweeps over a range of
+      heights, masses or drag coefficients.
+    </div>
+  </div>
+  <script type="module" src="workbench/workbench.js"></script>
+</body>
+</html>

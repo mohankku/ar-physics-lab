@@ -13,10 +13,16 @@ export async function runAll() {
   const results = [];
   for (const { name, fn } of queue) {
     try { await fn(); results.push({ name, ok: true }); }
-    catch (e) { results.push({ name, ok: false, error: e && e.stack ? e.stack : String(e) }); }
+    catch (e) { results.push({ name, ok: false, error: describe(e) }); }
   }
   const fail = results.filter((r) => !r.ok).length;
   return { pass: results.length - fail, fail, results };
+}
+
+// Error text with its message (some engines leave it out of the stack).
+function describe(e) {
+  if (!e || !e.stack) return String(e);
+  return e.message && !e.stack.includes(e.message) ? e.message + "\n" + e.stack : e.stack;
 }
 
 export function assert(cond, msg) {
