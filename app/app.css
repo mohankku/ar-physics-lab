@@ -175,6 +175,11 @@ a { color: var(--accent); }
 .big-btn:active { transform: scale(0.98); }
 .fine { font-size: 13px; color: rgba(255, 255, 255, 0.65); margin: 12px 0 0; }
 
+.place-chip {
+  margin-top: 12px; padding: 8px 14px; border-radius: 999px; border: 1px dashed rgba(255, 255, 255, 0.3);
+  background: transparent; color: rgba(255, 255, 255, 0.85); font-size: 14px; font-weight: 600;
+}
+.place-chip.set { border-style: solid; color: #6fe3a5; border-color: rgba(111, 227, 165, 0.4); }
 .toast {
   position: absolute; z-index: 2; left: 50%; top: calc(76px + var(--safe-t));
   transform: translate(-50%, -12px); opacity: 0; transition: opacity 0.2s, transform 0.2s;
@@ -213,6 +218,13 @@ a { color: var(--accent); }
 .review-row input { flex: 1; min-width: 0; accent-color: var(--accent); }
 .scrub-t { font-size: 13px; color: rgba(255, 255, 255, 0.7); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .seg-field legend small { font-weight: 400; color: var(--muted); margin-left: 6px; }
+.seg-field.place { display: grid; gap: 10px; justify-items: start; }
+.place-inputs { display: flex; flex-wrap: wrap; gap: 12px; }
+.place-inputs label { display: flex; align-items: center; gap: 6px; font-weight: 600; }
+.place-inputs input {
+  width: 96px; min-height: 44px; padding: 0 10px; border-radius: 12px; border: 2px solid var(--line);
+  background: var(--surface-2); text-align: right;
+}
 .count { min-width: 24px; padding: 1px 7px; border-radius: 999px; background: rgba(255, 255, 255, 0.25); font-size: 14px; }
 
 /* Panels: bottom sheets on narrow screens */

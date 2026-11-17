@@ -1,5 +1,6 @@
 import { test, assert, near, rng, gaussian } from "./harness.js";
 import {
+  localGravity,
   fallTime, gravityFromDrop, mean, std, median, percentError,
   fitGravity, fitFreeFall, robustFitFreeFall, fitLine, robustFit
 } from "../core/physics.js";
@@ -113,4 +114,17 @@ test("robustFit: drops an outlier around any model", () => {
   const r = robustFit(pts, fitLine, (f, p) => Math.abs(p.v - (f.a + f.b * p.t)), { floor: 0.01 });
   assert(r.rejected === 1, "rejected " + r.rejected);
   near(r.fit.b, 3, 1e-9, "slope");
+});
+
+test("localGravity: WGS84 normal gravity by latitude and height", () => {
+  near(localGravity(0), 9.7803253, 1e-6, "equator");
+  near(localGravity(90), 9.8321850, 1e-6, "pole");
+  near(localGravity(-90), localGravity(90), 1e-12, "same in both hemispheres");
+  near(localGravity(45), 9.8061992, 1e-5, "45°");
+  // Free air: ~3.086 µm/s² per meter.
+  near(localGravity(45) - localGravity(45, 1000), 3.086e-3, 2e-5, "1 km up");
+  assert(localGravity(30) < localGravity(31), "grows toward the poles");
+  let threw = false;
+  try { localGravity(91); } catch (e) { threw = true; }
+  assert(threw, "rejects an impossible latitude");
 });

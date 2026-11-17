@@ -26,6 +26,7 @@
 <pre id="result">running…</pre>
 <script type="module">
 import { installFakeCamera } from "./app-camera.js";
+import { localGravity } from "../core/physics.js";
 
 var q = new URLSearchParams(location.search);
 var EXP = q.get("exp") || "catch";
@@ -80,19 +81,41 @@ async function catchTest() {
     await wait(1200);
     log.push("drop from y=" + y1 + ": " + text("c-status"));
   }
-  await wait(400);
-  $("c-touch").click();
-  await wait(200);
-  await drop(0.5, 0.35, 0.1);   // 1.80 m
-  await drop(0.5, 0.98, 0.5);   // 1.00 m (pick it up off the floor)
-  await drop(0.5, 0.98, 0.75);  // 0.50 m
-  $("c-open-results").click();
-  await wait(400);
-  var n = +text("c-count"), g = parseFloat(text("c-g")), rows = doc.querySelectorAll("#c-rows tr").length;
-  log.push("count " + n + ", rows " + rows + ", g " + text("c-g"));
-  if (n !== 3 || rows !== 3) return done(false, "expected 3 drops, got " + n);
-  if (!(Math.abs(g - 9.81) < 0.02)) return done(false, "g = " + g);
-  done(true, "catch: 3 drops, g = " + g.toFixed(2));
+  // Earth's g depends on where you are: type the equator.
+  var KEY = "physapp_place", saved = win.localStorage.getItem(KEY); // restored at the end
+  try {
+    $("c-lat").value = "0"; $("c-alt").value = "0";
+    $("c-lat").dispatchEvent(new win.Event("change", { bubbles: true }));
+    var gEq = localGravity(0).toFixed(3);
+    log.push("typed latitude 0: " + text("c-world"));
+    if (text("c-world").indexOf(gEq) < 0) return done(false, "world label should show " + gEq);
+    await wait(400);
+    $("c-touch").click();
+    await wait(200);
+    await drop(0.5, 0.35, 0.1);   // 1.80 m
+    await drop(0.5, 0.98, 0.5);   // 1.00 m (pick it up off the floor)
+    await drop(0.5, 0.98, 0.75);  // 0.50 m
+    $("c-open-results").click();
+    await wait(400);
+    var n = +text("c-count"), g = text("c-g"), rows = doc.querySelectorAll("#c-rows tr").length;
+    log.push("count " + n + ", rows " + rows + ", g " + g + "; " + text("c-summary"));
+    if (n !== 3 || rows !== 3) return done(false, "expected 3 drops, got " + n);
+    if (parseFloat(g).toFixed(3) !== gEq) return done(false, "g = " + g + ", expected " + gEq);
+    // "Use my location", with the device saying: Reykjavík-ish, 120 m up.
+    win.navigator.geolocation.getCurrentPosition = function(ok) {
+      ok({ coords: { latitude: 64.1466, longitude: -21.94, altitude: 120 } });
+    };
+    $("c-locate").click();
+    await wait(300);
+    var gHere = localGravity(64.15, 120).toFixed(3);
+    log.push("located: " + text("c-place") + " | " + text("c-world") + " | " + text("c-place-chip") + " | drops now " + text("c-count"));
+    if (text("c-world").indexOf(gHere) < 0) return done(false, "after locating, expected g " + gHere);
+    if (+text("c-count") !== 0) return done(false, "drops at the old g should be cleared");
+    if (text("c-place-chip").indexOf(gHere) < 0) return done(false, "start-card location button should show " + gHere);
+    done(true, "catch: 3 drops at the equator, g = " + g + "; located → " + gHere);
+  } finally {
+    if (saved === null) win.localStorage.removeItem(KEY); else win.localStorage.setItem(KEY, saved);
+  }
 }
 
 /* ---------- Throw ---------- */

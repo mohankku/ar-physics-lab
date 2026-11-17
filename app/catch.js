@@ -12,11 +12,12 @@ import {
 import { store, $, keepAwake } from "./util.js";
 import { startCamera, stopCamera, cameraError } from "./camera.js";
 import { makePanels } from "./panels.js";
+import { Place } from "./place.js";
 
 var R = AR.render;
 var MAX_TRIALS = 50;
 var NO_HAND_HINT_MS = 2500;
-var WORLDS = { "9.81": "Earth", "1.62": "Moon", "3.71": "Mars", "24.79": "Jupiter", "mystery": "Mystery planet" };
+var WORLDS = { "earth": "Earth", "1.62": "Moon", "3.71": "Mars", "24.79": "Jupiter", "mystery": "Mystery planet" };
 
 export var Catch = {
   ball: new AR.CatchBall(),
@@ -34,7 +35,7 @@ export var Catch = {
   loadSettings: function() {
     var s = store.get("catch", {});
     this.settings = {
-      gravity: WORLDS[s.gravity] ? s.gravity : "9.81",
+      gravity: s.gravity === "9.81" ? "earth" : WORLDS[s.gravity] ? s.gravity : "earth",
       slow: ["1", "0.5", "0.25"].indexOf(s.slow) >= 0 ? s.slow : "1",
       ball: R.isBallStyle(s.ball) ? s.ball : "tennis",
       view: s.view > 0.3 && s.view <= 20 ? s.view : 2,
@@ -45,8 +46,15 @@ export var Catch = {
   },
   saveSettings: function() { store.set("catch", this.settings); },
   mystery: function() { return this.settings.gravity === "mystery"; },
+  /* g of the chosen world; Earth's is the one where the child is. */
+  realG: function() {
+    return this.settings.gravity === "earth" ? Place.g() : parseFloat(this.settings.gravity);
+  },
+  worldGText: function() {
+    return this.settings.gravity === "earth" ? Place.gText() : this.settings.gravity;
+  },
   params: function() {
-    var g = this.mystery() ? this.mysteryG : parseFloat(this.settings.gravity);
+    var g = this.mystery() ? this.mysteryG : this.realG();
     var wrap = $("c-wrap");
     return {
       g: g > 0 ? g : 9.81,
@@ -236,9 +244,14 @@ export var Catch = {
       $("c-g").textContent = "—";
       $("c-summary").textContent = "No drops yet. Drop the ball from a few different heights.";
     } else {
-      $("c-g").textContent = s.gFit.toFixed(2) + " m/s²";
+      // Earth's g only differs from place to place in the third decimal.
+      var digits = this.settings.gravity === "earth" && Place.get() ? 3 : 2;
+      $("c-g").textContent = s.gFit.toFixed(digits) + " m/s²";
       var txt = "From the slope of " + s.n + (s.n === 1 ? " drop." : " drops.");
       if (s.n < 3 || s.spread < 0.5) txt += " Tip: drop from low, middle and high to make a good line.";
+      else if (this.settings.gravity === "earth") txt += Place.get()
+        ? " The real value where you are (" + Place.describe() + ") is " + Place.gText() + " m/s²."
+        : " Earth's g is about 9.81 m/s². Set your location in Settings for the exact value where you are.";
       else if (!this.mystery()) txt += " " + this.settings.gravity + " m/s² is the real value for " +
         WORLDS[this.settings.gravity] + ".";
       $("c-summary").textContent = txt;
@@ -272,7 +285,9 @@ export var Catch = {
   },
   showWorld: function() {
     var g = this.settings.gravity;
-    $("c-world").textContent = this.mystery() ? "Mystery planet · g = ?" : WORLDS[g] + " · g = " + g + " m/s²";
+    $("c-world").textContent = this.mystery() ? "Mystery planet · g = ?"
+      : WORLDS[g] + " · g = " + this.worldGText() + " m/s²" + (g === "earth" && Place.get() ? " here" : "");
+    $("c-earth-g").textContent = Place.gText();
   },
 
   /* ---------- setup ---------- */
@@ -363,6 +378,49 @@ export var Catch = {
     cv.addEventListener("pointercancel", up);
     cv.addEventListener("pointerleave", function() { if (!self.pointer.down) self.pointer.inside = false; });
   },
+  /* "Where are you?" in Settings: Earth's g depends on the place. */
+  initPlace: function() {
+    var self = this;
+    var chip = $("c-place-chip");
+    var show = function() {
+      var p = Place.get();
+      chip.textContent = p ? "📍 Gravity here: " + Place.gText() + " m/s² (" + Place.describe() + ")"
+        : "📍 Use my location for exact gravity";
+      chip.classList.toggle("set", !!p);
+      $("c-lat").value = p ? p.lat : "";
+      $("c-alt").value = p && p.alt ? p.alt : "";
+      $("c-place").textContent = p
+        ? "Earth's g at " + Place.describe() + ": " + Place.gText() + " m/s²."
+        : "Not set: Earth's g is taken as 9.81 m/s². It's 9.780 at the equator and 9.832 at the poles.";
+    };
+    var typed = function() {
+      var lat = parseFloat($("c-lat").value), alt = parseFloat($("c-alt").value);
+      if (!(lat >= -90 && lat <= 90)) { show(); return; }
+      Place.set({ lat: lat, alt: alt >= -500 && alt <= 9000 ? alt : 0, source: "typed" });
+    };
+    $("c-lat").addEventListener("change", typed);
+    $("c-alt").addEventListener("change", typed);
+    var locate = function() {
+      $("c-locate").disabled = chip.disabled = true;
+      $("c-place").textContent = chip.textContent = "📍 Finding where you are…";
+      Place.locate().then(show, function(err) {
+        show();
+        $("c-place").textContent = err.message;
+        chip.textContent = "📍 " + err.message;
+      }).then(function() { $("c-locate").disabled = chip.disabled = false; });
+    };
+    $("c-locate").addEventListener("click", locate);
+    chip.addEventListener("click", locate);
+    Place.onChange(function() {
+      show();
+      self.showWorld();
+      if (self.settings.gravity !== "earth") return;
+      self.trials = [];           // drops made with the old g don't belong in the new table
+      self.renderResults();
+      self.toast("Gravity here: " + Place.gText() + " m/s²", "info");
+    });
+    show();
+  },
   init: function() {
     var self = this;
     self.loadSettings();
@@ -371,6 +429,7 @@ export var Catch = {
     self.initSettings();
     self.initPointer();
     self.showWorld();
+    self.initPlace();
 
     $("c-cam").addEventListener("click", function() { self.startCamera(); });
     $("c-touch").addEventListener("click", function() { self.startTouch(); });
@@ -399,6 +458,7 @@ export var Catch = {
   /* Called when the screen is shown. */
   enter: function() {
     var self = this;
+    Place.refreshIfAllowed();
     requestAnimationFrame(function() { self.drawIdle(); self.renderResults(); });
   }
 };

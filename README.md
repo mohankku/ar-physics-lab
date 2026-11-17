@@ -26,7 +26,13 @@ sheet (phones). All three experiments are in it: **Catch & drop** (hand gestures
 finger/mouse), **Throw** (tap the ball once to teach its color, press Ready, throw; g,
 launch speed and angle, slow-motion replay with a ghost Earth throw) and **Swing**
 (type the string length, press Start; times N swings, and every run goes into a T²-vs-L
-graph, so changing the string shows what sets the beat). It's a Progressive Web App: **Install app** in Chrome/Edge/Android, or Share →
+graph, so changing the string shows what sets the beat). Earth's g is the real value
+**where the child is**: Settings → "Where are you?" takes the device's location (or a
+typed latitude and height) and computes WGS84 normal gravity, from 9.780 m/s² at the
+equator to 9.832 m/s² at the poles (`localGravity` in core/physics.js). Catch & drop's
+Earth ball falls with it, and all three experiments compare against it. The place is
+kept on the device only (latitude rounded to ~1 km, no address lookup); until it's
+set, Earth's g is 9.81. It's a Progressive Web App: **Install app** in Chrome/Edge/Android, or Share →
 Add to Home Screen on iPad/iPhone, and it works offline once the hand tracker has
 been used once. Catch & drop uses the front camera (you face it); Throw and Swing use
 the back camera (the device watches the ball), and a Settings switch flips either.
@@ -49,6 +55,7 @@ app/                the app (PWA): open app/
   camera.js           the one shared camera; picture frame that keeps the camera's shape
   panels.js           Results (side column / bottom sheet) and Settings panels
   review.js           slow-motion replay and frame-by-frame slider after a throw
+  place.js            where the child is → Earth's local g (device location or typed)
   app.css             touch-first styles, light/dark
   sw.js               offline: app files network-first, hand tracker cache-first
   manifest.webmanifest, icon.svg, icon-*.png
@@ -156,7 +163,9 @@ to run everything.
 **App smoke tests (browser).** With the server running, open
 <http://localhost:8000/tests/app-smoke.html?exp=catch> (or `exp=throw`, `exp=swing`).
 They play the app the way a child would and check the Results panel:
-- **catch**: three drops by finger touches (no hover, like a tablet).
+- **catch**: types the equator as the location, makes three drops by finger touches (no
+  hover, like a tablet) and expects g = 9.780; then fakes "Use my location" and checks
+  Earth's g updates. Your own saved location is put back afterwards.
 - **throw**: a simulated camera (`tests/app-camera.js`, using the bench scenes) shows a
   red ball. The test taps it, presses Ready, and the ball is thrown twice. Graded with
   the bench's tolerances: g ±5%, sideways speed ±5%, launch speed ±8%, angle ±4°.

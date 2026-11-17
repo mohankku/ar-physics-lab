@@ -110,6 +110,7 @@
           </ol>
           <button class="big-btn primary" id="c-cam" type="button"><svg class="ic"><use href="#i-camera"/></svg> Use camera</button>
           <button class="big-btn" id="c-touch" type="button"><svg class="ic"><use href="#i-touch"/></svg> Use finger or mouse</button>
+          <button class="place-chip" id="c-place-chip" type="button">📍 Use my location for exact gravity</button>
           <p class="fine" id="c-start-note">The first time, the hand tracker downloads (about 18 MB). Video never leaves this device.</p>
         </div>
       </div>
@@ -145,7 +146,7 @@
           <p>Which world is it? Compare with your g:</p>
           <div class="worlds">
             <span>Moon <b>1.62</b></span><span>Mars <b>3.71</b></span><span>Venus <b>8.87</b></span>
-            <span>Earth <b>9.81</b></span><span>Neptune <b>11.15</b></span><span>Jupiter <b>24.79</b></span>
+            <span>Earth <b id="c-earth-g">9.81</b></span><span>Neptune <b>11.15</b></span><span>Jupiter <b>24.79</b></span>
           </div>
           <button class="pill-btn" id="c-reveal" type="button">Reveal the answer</button>
         </div>
@@ -169,12 +170,21 @@
         <fieldset class="seg-field">
           <legend>World</legend>
           <div class="seg" id="c-gravity" role="radiogroup">
-            <button type="button" data-v="9.81" role="radio">🌍 Earth</button>
+            <button type="button" data-v="earth" role="radio">🌍 Earth</button>
             <button type="button" data-v="1.62" role="radio">🌕 Moon</button>
             <button type="button" data-v="3.71" role="radio">🔴 Mars</button>
             <button type="button" data-v="24.79" role="radio">🪐 Jupiter</button>
             <button type="button" data-v="mystery" role="radio">❓ Mystery</button>
           </div>
+        </fieldset>
+        <fieldset class="seg-field place">
+          <legend>Where are you? <small>Earth's gravity is a little different from place to place</small></legend>
+          <button class="pill-btn" id="c-locate" type="button">📍 Use my location</button>
+          <div class="place-inputs">
+            <label>Latitude <input id="c-lat" type="number" inputmode="decimal" min="-90" max="90" step="0.1" placeholder="51.5"> °</label>
+            <label>Height <input id="c-alt" type="number" inputmode="decimal" min="-500" max="9000" step="1" placeholder="0"> m</label>
+          </div>
+          <p class="fine" id="c-place"></p>
         </fieldset>
         <fieldset class="seg-field">
           <legend>Speed</legend>

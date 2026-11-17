@@ -13,7 +13,7 @@
 export const VERSION = "2.1.0";
 
 export {
-  REFERENCE_G, fallTime, gravityFromDrop, mean, std, median, percentError,
+  REFERENCE_G, localGravity, fallTime, gravityFromDrop, mean, std, median, percentError,
   fitGravity, fitFreeFall, robustFitFreeFall, fitLine, robustFit
 } from "./physics.js";
 export { analyzeFall, cleanSamples, frameRate } from "./analysis.js";

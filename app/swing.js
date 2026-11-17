@@ -11,6 +11,7 @@ import { inkOf } from "../lab/catchview.js";
 import { store, $, keepAwake } from "./util.js";
 import { startCamera, stopCamera, cameraError, fitFrame } from "./camera.js";
 import { makePanels } from "./panels.js";
+import { Place } from "./place.js";
 
 var R = AR.render;
 var LIVE_EVERY_S = 0.4;  // re-analyze this often while timing
@@ -44,7 +45,7 @@ export var Swing = {
   diameterM: function() { return AR.BALL_DIAMETERS[this.settings.ball]; },
   /* Pivot to the ball's center. */
   lengthM: function() { return this.settings.lengthCm / 100 + this.diameterM() / 2; },
-  predictedT: function() { return 2 * Math.PI * Math.sqrt(this.lengthM() / AR.REFERENCE_G); },
+  predictedT: function() { return 2 * Math.PI * Math.sqrt(this.lengthM() / Place.g()); },
 
   status: function(msg, cls) {
     var el = $("s-status");
@@ -262,12 +263,12 @@ export var Swing = {
     } else if (n > 1 && spread >= 0.1) {
       $("s-g").textContent = fit.toFixed(2) + " m/s²";
       $("s-summary").textContent = "From the slope of " + n + " runs with different strings. " +
-        "Longer strings swing slower: T² grows in step with L. The real value on Earth is 9.81 m/s².";
+        "Longer strings swing slower: T² grows in step with L." + Place.compareText();
     } else {
       var last = this.runs[n - 1];
       $("s-g").textContent = last.g.toFixed(2) + " m/s²";
       $("s-summary").textContent = "From your last run (± " + last.gErr.toFixed(2) + "). " +
-        "Try a different string length: does the time for one swing change? The real value on Earth is 9.81 m/s².";
+        "Try a different string length: does the time for one swing change?" + Place.compareText();
     }
     $("s-plots").hidden = !this.last;
     if (this.last && this.panels && this.panels.resultsVisible()) {
@@ -400,6 +401,7 @@ export var Swing = {
     self.panels = makePanels($("screen-swing"), "swing", function() { self.renderResults(); });
     self.initSettings();
     self.showTheory();
+    Place.onChange(function() { self.showTheory(); self.renderResults(); });
     self.readouts(null);
     $("s-cam").addEventListener("click", function() { self.openCamera(); });
     $("s-go").addEventListener("click", function() { self.toggle(); });
@@ -422,6 +424,7 @@ export var Swing = {
   },
   enter: function() {
     var self = this;
+    Place.refreshIfAllowed();
     requestAnimationFrame(function() { self.layout(); self.renderResults(); });
   }
 };

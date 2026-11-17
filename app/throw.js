@@ -12,6 +12,7 @@ import { startCamera, stopCamera, cameraError, fitFrame } from "./camera.js";
 import { makePanels } from "./panels.js";
 import { makeReview } from "./review.js";
 import { inkOf } from "../lab/catchview.js";
+import { Place } from "./place.js";
 
 var R = AR.render;
 var MAX_THROWS = 30;
@@ -249,7 +250,7 @@ export var Throw = {
       $("t-summary").textContent = (n > 1
         ? "Average of " + n + " throws (spread ± " + AR.std(gs).toFixed(2) + "). "
         : "From your throw (± " + last.gErr.toFixed(2) + "). ") +
-        "The real value on Earth is 9.81 m/s²." + (n < 3 ? " Throw a few more times for a better average." : "");
+        Place.compareText().trim() + (n < 3 ? " Throw a few more times for a better average." : "");
     }
     $("t-plot-wrap").hidden = !this.last;
     if (this.last && this.panels && this.panels.resultsVisible()) {
@@ -330,7 +331,7 @@ export var Throw = {
     self.review = makeReview({
       canvas: $("t-canvas"), row: $("t-review"), slider: $("t-scrub"), label: $("t-scrub-t"), play: $("t-play")
     }, {
-      path: function(res) { return AR.projectilePath(res); },
+      path: function(res) { return AR.projectilePath(res, Place.g()); },  // ghost: a throw at local g
       draw: AR.drawProjectileReplay,
       g: function(res) { return res.g; }
     });
@@ -356,10 +357,12 @@ export var Throw = {
       e.preventDefault();
       self.toggle();
     });
+    Place.onChange(function() { self.renderResults(); });
     self.renderResults();
   },
   enter: function() {
     var self = this;
+    Place.refreshIfAllowed();
     requestAnimationFrame(function() { self.layout(); self.renderResults(); });
   }
 };

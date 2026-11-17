@@ -43,6 +43,25 @@ export function median(xs) {
   return n % 2 ? s[(n - 1) / 2] : (s[n / 2 - 1] + s[n / 2]) / 2;
 }
 
+/**
+ * Gravity at a place on Earth (m/s²), from latitude and height: the WGS84
+ * normal gravity (Somigliana's formula), which includes the Earth's spin
+ * and flattening (about 9.780 at the equator, 9.832 at the poles), less
+ * about 3.1 mm/s² per km of height (WGS84 second-order free-air term).
+ * Local rock and mountains change real g by a further ~0.01%, ignored here.
+ * @param {number} latDeg   latitude, degrees (−90..90)
+ * @param {number} [heightM=0]  height above sea level, m
+ */
+export function localGravity(latDeg, heightM = 0) {
+  if (!(latDeg >= -90 && latDeg <= 90)) throw new RangeError("localGravity: latitude must be −90..90");
+  const A = 6378137, F = 1 / 298.257223563, M = 0.00344978650684;
+  const GE = 9.7803253359, K = 0.00193185265241, E2 = 0.00669437999013;
+  const s2 = Math.sin(latDeg * Math.PI / 180) ** 2;
+  const g0 = GE * (1 + K * s2) / Math.sqrt(1 - E2 * s2);
+  const h = isFinite(heightM) ? heightM : 0;
+  return g0 * (1 - 2 / A * (1 + F + M - 2 * F * s2) * h + 3 * h * h / (A * A));
+}
+
 /** Signed % error of g against REFERENCE_G. */
 export function percentError(g) {
   return (g - REFERENCE_G) / REFERENCE_G * 100;
